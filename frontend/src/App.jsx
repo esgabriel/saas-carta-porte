@@ -4,6 +4,7 @@ import MainLayout from './components/layout/MainLayout';
 import Dashboard from './pages/Dashboard';
 import Viajes from './pages/Viajes';
 import Catalogos from './pages/Catalogos';
+import Clientes from './pages/Catalogos/Clientes';
 
 function App() {
   return (
@@ -13,6 +14,7 @@ function App() {
           <Route index element={<Dashboard />} />
           <Route path="viajes" element={<Viajes />} />
           <Route path="catalogos" element={<Catalogos />} />
+          <Route path="catalogos/clientes" element={<Clientes />} />
         </Route>
       </Routes>
     </BrowserRouter>
