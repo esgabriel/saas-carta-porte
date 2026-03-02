@@ -1,0 +1,186 @@
+# =============================================================================
+# docker-compose.yml — Laravel Sail · Optimizado para i3 / 8GB RAM
+# Límites globales de referencia:
+#   CPU total asignada : ~2.0 cores  (dejando ~2 libres para el SO y el IDE)
+#   RAM total asignada : ~2.8 GB     (dejando ~5 GB para el SO, navegador, etc.)
+# =============================================================================
+
+services:
+
+    # ---------------------------------------------------------------------------
+    # PHP 8.4 — Servidor de aplicación Laravel
+    # CPU  : 1.0 core  → suficiente para servir peticiones y correr artisan
+    # RAM  : 512 MB     → Laravel base consume ~80–120 MB; margen para picos
+    # ---------------------------------------------------------------------------
+    laravel.test:
+        build:
+            context: ./vendor/laravel/sail/runtimes/8.4
+            dockerfile: Dockerfile
+            args:
+                WWWGROUP: '${WWWGROUP}'
+        image: sail-8.4/app
+        container_name: carta_porte_app
+        restart: unless-stopped
+        ports:
+            - '${APP_PORT:-80}:80' # HTTP Laravel
+            - '${VITE_PORT:-5173}:5173' # Vite HMR (dev frontend)
+        environment:
+            WWWUSER: '${WWWUSER}'
+            LARAVEL_SAIL: 1
+            APP_ENV: '${APP_ENV:-local}'
+            DB_CONNECTION: pgsql
+            DB_HOST: pgsql
+            DB_PORT: 5432
+            DB_DATABASE: '${DB_DATABASE}'
+            DB_USERNAME: '${DB_USERNAME}'
+            DB_PASSWORD: '${DB_PASSWORD}'
+            REDIS_HOST: redis
+            REDIS_PORT: 6379
+            QUEUE_CONNECTION: redis # Colas manejadas por Redis
+            CACHE_STORE: redis
+            SESSION_DRIVER: redis
+        volumes:
+            - '.:/var/www/html' # Bind mount del código fuente
+        networks:
+            - carta_porte_network
+        depends_on:
+            pgsql:
+                condition: service_healthy
+            redis:
+                condition: service_healthy
+        deploy:
+            resources:
+                limits:
+                    cpus: '1.0'
+                    memory: 512M
+                reservations:
+                    cpus: '0.25'
+                    memory: 128M
+
+    # ---------------------------------------------------------------------------
+    # Queue Worker — Proceso dedicado para Laravel Queues vía Redis
+    # Separado del contenedor principal para no bloquear peticiones HTTP
+    # CPU  : 0.5 core  → los jobs de timbrado son I/O-bound (llamadas a Facturapi)
+    # RAM  : 256 MB     → un worker con pocos jobs en paralelo consume poco
+    # ---------------------------------------------------------------------------
+    queue.worker:
+        image: sail-8.4/app
+        container_name: carta_porte_queue
+        restart: unless-stopped
+        command: php artisan queue:work redis --sleep=3 --tries=3 --max-time=3600
+        environment:
+            WWWUSER: '${WWWUSER}'
+            LARAVEL_SAIL: 1
+            APP_ENV: '${APP_ENV:-local}'
+            DB_CONNECTION: pgsql
+            DB_HOST: pgsql
+            DB_PORT: 5432
+            DB_DATABASE: '${DB_DATABASE}'
+            DB_USERNAME: '${DB_USERNAME}'
+            DB_PASSWORD: '${DB_PASSWORD}'
+            REDIS_HOST: redis
+            REDIS_PORT: 6379
+            QUEUE_CONNECTION: redis
+        volumes:
+            - '.:/var/www/html'
+        networks:
+            - carta_porte_network
+        depends_on:
+            pgsql:
+                condition: service_healthy
+            redis:
+                condition: service_healthy
+        deploy:
+            resources:
+                limits:
+                    cpus: '0.50'
+                    memory: 256M
+                reservations:
+                    cpus: '0.10'
+                    memory: 64M
+
+    # ---------------------------------------------------------------------------
+    # PostgreSQL 16
+    # CPU  : 0.5 core  → queries simples OLTP; no hay analítica pesada
+    # RAM  : 512 MB     → shared_buffers ajustado al 25% del límite del contenedor
+    # Datos persistidos en volumen nombrado (no se pierden al recrear contenedor)
+    # ---------------------------------------------------------------------------
+    pgsql:
+        image: postgres:16-alpine # Alpine = imagen ~50 MB vs ~220 MB oficial
+        container_name: carta_porte_db
+        restart: unless-stopped
+        ports:
+            - '${FORWARD_DB_PORT:-5432}:5432'
+        environment:
+            POSTGRES_DB: '${DB_DATABASE}'
+            POSTGRES_USER: '${DB_USERNAME}'
+            POSTGRES_PASSWORD: '${DB_PASSWORD}'
+            POSTGRES_INITDB_ARGS: '--encoding=UTF8 --locale=es_MX.UTF-8'
+            # Ajustes de memoria internos de Postgres alineados con el límite del contenedor
+            POSTGRES_SHARED_BUFFERS: '128MB' # 25% de 512 MB
+            POSTGRES_WORK_MEM: '4MB'
+            POSTGRES_MAINTENANCE_WORK_MEM: '64MB'
+            POSTGRES_EFFECTIVE_CACHE_SIZE: '384MB'
+        volumes:
+            - pgsql_data:/var/lib/postgresql/data # Persistencia de datos
+        networks:
+            - carta_porte_network
+        healthcheck:
+            test: [ 'CMD-SHELL', 'pg_isready -U ${DB_USERNAME} -d ${DB_DATABASE}' ]
+            interval: 10s
+            timeout: 5s
+            retries: 5
+        deploy:
+            resources:
+                limits:
+                    cpus: '0.50'
+                    memory: 512M
+                reservations:
+                    cpus: '0.10'
+                    memory: 128M
+
+    # ---------------------------------------------------------------------------
+    # Redis 7 (Alpine)
+    # CPU  : 0.25 core  → operaciones en memoria son extremadamente ligeras
+    # RAM  : 128 MB      → máximo de memoria Redis configurado en 100 MB;
+    #                      política allkeys-lru descarta entradas antiguas si se llena
+    # Usado para: Colas (jobs) + Caché + Sesiones
+    # ---------------------------------------------------------------------------
+    redis:
+        image: redis:7-alpine
+        container_name: carta_porte_redis
+        restart: unless-stopped
+        command: >
+            redis-server --maxmemory 100mb --maxmemory-policy allkeys-lru --save "" --appendonly no
+        ports:
+            - '${FORWARD_REDIS_PORT:-6379}:6379'
+        networks:
+            - carta_porte_network
+        healthcheck:
+            test: [ 'CMD', 'redis-cli', 'ping' ]
+            interval: 10s
+            timeout: 5s
+            retries: 5
+        deploy:
+            resources:
+                limits:
+                    cpus: '0.25'
+                    memory: 128M
+                reservations:
+                    cpus: '0.05'
+                    memory: 32M
+
+# =============================================================================
+# Volúmenes nombrados
+# =============================================================================
+volumes:
+    pgsql_data:
+        driver: local
+
+# =============================================================================
+# Red interna — los contenedores se comunican por nombre de servicio,
+# no por IP. Aislada del host salvo los puertos expuestos arriba.
+# =============================================================================
+networks:
+    carta_porte_network:
+        driver: bridge
