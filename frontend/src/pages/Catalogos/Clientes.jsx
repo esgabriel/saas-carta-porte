@@ -24,7 +24,7 @@ export default function Clientes() {
 
     // Form State
     const [formData, setFormData] = useState({
-        razon_social: "",
+        nombre_razon_social: "",
         rfc: "",
         regimen_fiscal: "",
         uso_cfdi: "",
@@ -59,7 +59,7 @@ export default function Clientes() {
             await api.post("/clientes", formData);
             setIsOpen(false);
             setFormData({
-                razon_social: "",
+                nombre_razon_social: "",
                 rfc: "",
                 regimen_fiscal: "",
                 uso_cfdi: "",
@@ -146,12 +146,12 @@ export default function Clientes() {
                         </DrawerHeader>
                         <form id="clienteForm" onSubmit={handleSubmit} className="p-4 flex flex-col gap-4 overflow-y-auto">
                             <div className="space-y-2">
-                                <Label htmlFor="razon_social">Razón Social *</Label>
+                                <Label htmlFor="nombre_razon_social">Razón Social *</Label>
                                 <Input
-                                    id="razon_social"
-                                    name="razon_social"
+                                    id="nombre_razon_social"
+                                    name="nombre_razon_social"
                                     placeholder="Ej. Transportes del Norte SA"
-                                    value={formData.razon_social}
+                                    value={formData.nombre_razon_social}
                                     onChange={handleChange}
                                     required
                                     className="h-12"
