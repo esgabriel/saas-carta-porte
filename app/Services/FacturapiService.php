@@ -108,14 +108,16 @@ class FacturapiService implements FacturacionGatewayInterface
             [
                 'tipo_ubicacion' => 'Destino',
                 'distancia_recorrida' => $viaje->distancia_recorrida,
-                'fecha_hora_salida_llegada' => $viaje->fecha_hora_llegada_est->format('Y-m-d\TH:i:s'),
+                'fecha_hora_salida_llegada' => $viaje->fecha_hora_llegada_est
+                    ? $viaje->fecha_hora_llegada_est->format('Y-m-d\TH:i:s')
+                    : $viaje->fecha_hora_salida->addDay()->format('Y-m-d\TH:i:s'),
                 'domicilio' => [
                     'calle' => $destino->calle,
                     'estado' => $destino->estado,
                     'pais' => $destino->pais,
                     'codigo_postal' => $destino->codigo_postal,
                 ]
-            ]
+            ],
         ];
     }
 
@@ -154,10 +156,7 @@ class FacturapiService implements FacturacionGatewayInterface
                     'anio_modelo_vm' => $viaje->vehiculo->anio_modelo,
                 ],
                 // El SAT pide póliza de seguro mínimo de Responsabilidad Civil. Mapendo hardcodeado para el ejemplo
-                'seguros' => [
-                    'asegura_resp_civil' => 'Seguros XYZ', // Simplificado. En un escenario real vendria de $viaje->vehiculo->seguros
-                    'poliza_resp_civil' => '123456789'
-                ],
+                'seguros' => $this->mapSeguros($viaje),
                 'remolques' => $viaje->remolque ? [
                     [
                         'sub_tipo_rem' => $viaje->remolque->subtipo_rem,
@@ -179,5 +178,38 @@ class FacturapiService implements FacturacionGatewayInterface
                 'nombre_figura' => $operador->nombre,
             ]
         ];
+    }
+    
+    private function mapSeguros(Viaje $viaje): array
+    {
+        $seguros = $viaje->vehiculo->seguros;
+
+        $rc = $seguros->firstWhere('tipo', 'responsabilidad_civil');
+
+        if (!$rc) {
+            throw new Exception(
+                "El vehículo con placa '{$viaje->vehiculo->placa}' no tiene una póliza de " .
+                "Responsabilidad Civil registrada. El SAT la requiere para timbrar."
+            );
+        }
+
+        $segurosCfdi = [
+            'asegura_resp_civil' => $rc->aseguradora,
+            'poliza_resp_civil'  => $rc->num_poliza,
+        ];
+
+        $carga = $seguros->firstWhere('tipo', 'carga');
+        if ($carga) {
+            $segurosCfdi['asegura_carga']  = $carga->aseguradora;
+            $segurosCfdi['poliza_carga']   = $carga->num_poliza;
+        }
+
+        $medioAmbiente = $seguros->firstWhere('tipo', 'medio_ambiente');
+        if ($medioAmbiente) {
+            $segurosCfdi['asegura_med_ambiente']  = $medioAmbiente->aseguradora;
+            $segurosCfdi['poliza_med_ambiente']   = $medioAmbiente->num_poliza;
+        }
+
+        return $segurosCfdi;
     }
 }

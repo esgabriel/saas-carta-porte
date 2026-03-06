@@ -36,8 +36,9 @@ class CartaPorteController extends Controller
 
         // Buscar Viaje validando que pertenece al tenant (gracias a GlobalScope)
         $viaje = Viaje::with([
+            'tenant',
             'cliente',
-            'vehiculo',
+            'vehiculo.seguros',
             'operador',
             'remolque',
             'ubicacionOrigen',
