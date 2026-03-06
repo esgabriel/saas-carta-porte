@@ -5,21 +5,13 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\CartaPorte;
 use App\Models\Viaje;
-use App\Services\FacturapiService;
 use App\Services\TenantContext;
 use Illuminate\Http\Request;
-use Exception;
-use Illuminate\Support\Facades\Log;
 
 class CartaPorteController extends Controller
 {
-    protected string $tenantId;
-    protected FacturapiService $facturapiService;
-
-    public function __construct(TenantContext $tenantContext, FacturapiService $facturapiService)
+    public function __construct(protected TenantContext $tenantContext)
     {
-        $this->tenantId = $tenantContext->getTenantId();
-        $this->facturapiService = $facturapiService;
     }
 
     /**
@@ -32,9 +24,9 @@ class CartaPorteController extends Controller
     }
 
     /**
-     * Store a newly created resource in storage (Timbrado de Viaje).
+     * Store a newly created resource in storage (Timbrado de Viaje de forma asíncrona).
      */
-    public function store(Request $request)
+    public function store(Request $request): \Illuminate\Http\JsonResponse
     {
         $request->validate([
             'viaje_id' => 'required|uuid|exists:viajes,id'
@@ -54,57 +46,30 @@ class CartaPorteController extends Controller
         ])->findOrFail($viajeId);
 
         // Verificar si este viaje ya fue timbrado o está en proceso
-        if ($viaje->estatus === 'timbrado' || CartaPorte::where('viaje_id', $viajeId)->where('estatus', 'timbrado')->exists()) {
+        if ($viaje->estatus === 'timbrado' || CartaPorte::where('viaje_id', $viajeId)->whereIn('estatus', ['timbrado', 'procesando'])->exists()) {
             return response()->json([
-                'message' => 'Este viaje ya cuenta con una Carta Porte timbrada.'
+                'message' => 'Este viaje ya está procesando una Carta Porte o ya fue timbrado.'
             ], 422);
         }
 
-        // Crear/Actualizar registro de CartaPorte a estado Pendiente/Error previo
-        $cartaPorte = CartaPorte::firstOrCreate(
-        ['viaje_id' => $viajeId],
-        ['tenant_id' => $this->tenantId]
+        // Crear/Actualizar registro de CartaPorte a estado Procesando
+        $cartaPorte = CartaPorte::updateOrCreate(
+            ['viaje_id' => $viajeId],
+            [
+                'tenant_id' => $this->tenantContext->getTenantId(),
+                'estatus' => 'procesando',
+                'error_detalle' => null
+            ]
         );
 
-        try {
-            // Llamar al servicio adaptador a Facturapi
-            $facturacionResponse = $this->facturapiService->timbrarViaje($viaje);
+        // Actualizamos estatus del viaje temporalmente si es necesario, o lo mantenemos hasta que el Job acabe
+        // Despachar a la cola
+        \App\Jobs\TimbrarViajeJob::dispatch($viaje);
 
-            // Actualizamos la base de datos si fue exitoso
-            $cartaPorte->update([
-                'facturapi_id' => $facturacionResponse['id'] ?? null,
-                'uuid_timbrado' => $facturacionResponse['uuid'] ?? null,
-                'estatus' => 'timbrado',
-                'xml_url' => $facturacionResponse['verification_url'] ?? null, // Simplificado, usualmente la URL de descarga viene en la respuesta o se llama endpint de descarga
-                'pdf_url' => null, // Dejemos nulo para un ejemplo basico
-                'fecha_timbrado' => now(),
-                'error_detalle' => null
-            ]);
-
-            // Actualizamos estatus del viaje
-            $viaje->update(['estatus' => 'timbrado']);
-
-            return response()->json([
-                'message' => 'Carta Porte timbrada exitosamente.',
-                'data' => $cartaPorte
-            ], 201);
-
-        }
-        catch (Exception $e) {
-            // Log the error detailed info
-            Log::error("Error timbrando viaje {$viajeId}: " . $e->getMessage());
-
-            // Actualizar el status de error
-            $cartaPorte->update([
-                'estatus' => 'error',
-                'error_detalle' => $e->getMessage()
-            ]);
-
-            return response()->json([
-                'message' => 'Error al procesar el timbrado con el SAT.',
-                'error_detalle' => $e->getMessage()
-            ], 422);
-        }
+        return response()->json([
+            'message' => 'La Carta Porte se está procesando en segundo plano.',
+            'data' => $cartaPorte
+        ], 202);
     }
 
     /**

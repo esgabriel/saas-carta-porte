@@ -3,10 +3,11 @@
 namespace App\Services;
 
 use App\Models\Viaje;
+use App\Contracts\FacturacionGatewayInterface;
 use Illuminate\Support\Facades\Http;
 use Exception;
 
-class FacturapiService
+class FacturapiService implements FacturacionGatewayInterface
 {
     protected string $baseUrl = 'https://www.facturapi.io/v2';
 
