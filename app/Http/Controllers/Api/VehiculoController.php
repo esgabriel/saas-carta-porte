@@ -10,29 +10,25 @@ use App\Services\TenantContext;
 
 class VehiculoController extends Controller
 {
-    protected string $tenantId;
-
-    public function __construct(TenantContext $tenantContext)
+    public function __construct(protected TenantContext $tenantContext)
     {
-        $this->tenantId = $tenantContext->getTenantId();
     }
 
     /**
      * Display a listing of the resource.
      */
-    public function index()
+    public function index(): \Illuminate\Http\JsonResponse
     {
-        $vehiculos = Vehiculo::all();
-        return response()->json(['data' => $vehiculos]);
+        return response()->json(['data' => Vehiculo::all()]);
     }
 
     /**
      * Store a newly created resource in storage.
      */
-    public function store(StoreVehiculoRequest $request)
+    public function store(StoreVehiculoRequest $request): \Illuminate\Http\JsonResponse
     {
         $data = $request->validated();
-        $data['tenant_id'] = $this->tenantId;
+        $data['tenant_id'] = $this->tenantContext->getTenantId();
 
         $vehiculo = Vehiculo::create($data);
 
@@ -45,7 +41,7 @@ class VehiculoController extends Controller
     /**
      * Display the specified resource.
      */
-    public function show(Vehiculo $vehiculo)
+    public function show(Vehiculo $vehiculo): \Illuminate\Http\JsonResponse
     {
         return response()->json(['data' => $vehiculo]);
     }
@@ -53,7 +49,7 @@ class VehiculoController extends Controller
     /**
      * Update the specified resource in storage.
      */
-    public function update(UpdateVehiculoRequest $request, Vehiculo $vehiculo)
+    public function update(UpdateVehiculoRequest $request, Vehiculo $vehiculo): \Illuminate\Http\JsonResponse
     {
         $vehiculo->update($request->validated());
 
@@ -66,12 +62,10 @@ class VehiculoController extends Controller
     /**
      * Remove the specified resource from storage.
      */
-    public function destroy(Vehiculo $vehiculo)
+    public function destroy(Vehiculo $vehiculo): \Illuminate\Http\JsonResponse
     {
         $vehiculo->delete();
 
-        return response()->json([
-            'message' => 'Vehículo eliminado correctamente.'
-        ], 204);
+        return response()->json(null, 204);
     }
 }

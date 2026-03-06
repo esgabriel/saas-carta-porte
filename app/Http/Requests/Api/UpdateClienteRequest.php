@@ -23,9 +23,9 @@ class UpdateClienteRequest extends FormRequest
     {
         return [
             'nombre_razon_social' => ['sometimes', 'required', 'string', 'max:255'],
-            'rfc' => ['sometimes', 'required', 'string', 'max:13'],
-            'regimen_fiscal' => ['sometimes', 'required', 'string', 'max:10'],
-            'uso_cfdi' => ['sometimes', 'required', 'string', 'max:10'],
+            'rfc' => ['sometimes', 'required', 'string', 'regex:/^[A-Z&Ñ]{3,4}[0-9]{2}(0[1-9]|1[012])(0[1-9]|[12][0-9]|3[01])[A-Z0-9]{2}[A-Z0-9A]$/i'],
+            'regimen_fiscal' => ['sometimes', 'required', 'string', 'size:3'],
+            'uso_cfdi' => ['sometimes', 'required', 'string', 'size:3'],
             'correo' => ['nullable', 'email', 'max:255'],
             'telefono' => ['nullable', 'string', 'max:20'],
             'activo' => ['sometimes', 'boolean'],

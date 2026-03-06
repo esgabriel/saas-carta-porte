@@ -38,8 +38,8 @@ class UpdateUbicacionRequest extends FormRequest
             'colonia' => ['nullable', 'string', 'max:100'],
             'municipio' => ['sometimes', 'required', 'string', 'max:100'],
             'estado' => ['sometimes', 'required', 'string', 'max:5'],
-            'pais' => ['nullable', 'string', 'max:3'],
-            'codigo_postal' => ['sometimes', 'required', 'string', 'max:5'],
+            'pais' => ['nullable', 'string', 'size:3'],
+            'codigo_postal' => ['sometimes', 'required', 'string', 'regex:/^[0-9]{5}$/'],
             'activo' => ['sometimes', 'boolean'],
         ];
     }

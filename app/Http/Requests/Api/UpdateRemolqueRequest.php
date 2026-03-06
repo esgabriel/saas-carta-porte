@@ -22,7 +22,7 @@ class UpdateRemolqueRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'placa' => ['sometimes', 'required', 'string', 'max:15'],
+            'placa' => ['sometimes', 'required', 'string', 'regex:/^[A-Z0-9]+$/', 'max:15'],
             'subtipo_rem' => ['sometimes', 'required', 'string', 'max:10'],
             'activo' => ['sometimes', 'boolean'],
         ];

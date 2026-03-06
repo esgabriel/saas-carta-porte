@@ -22,7 +22,7 @@ class StoreVehiculoRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'placa' => ['required', 'string', 'max:15'],
+            'placa' => ['required', 'string', 'regex:/^[A-Z0-9]+$/', 'max:15'],
             'anio_modelo' => ['required', 'integer', 'min:1900', 'max:' . (date('Y') + 1)],
             'config_vehicular' => ['required', 'string', 'max:10'],
             'peso_bruto_vehicular' => ['required', 'numeric', 'min:0'],

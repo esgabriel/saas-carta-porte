@@ -22,7 +22,7 @@ class StoreRemolqueRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'placa' => ['required', 'string', 'max:15'],
+            'placa' => ['required', 'string', 'regex:/^[A-Z0-9]+$/', 'max:15'],
             'subtipo_rem' => ['required', 'string', 'max:10'],
             'activo' => ['boolean'],
         ];

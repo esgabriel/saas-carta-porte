@@ -10,29 +10,25 @@ use App\Services\TenantContext;
 
 class RemolqueController extends Controller
 {
-    protected string $tenantId;
-
-    public function __construct(TenantContext $tenantContext)
+    public function __construct(protected TenantContext $tenantContext)
     {
-        $this->tenantId = $tenantContext->getTenantId();
     }
 
     /**
      * Display a listing of the resource.
      */
-    public function index()
+    public function index(): \Illuminate\Http\JsonResponse
     {
-        $remolques = Remolque::all();
-        return response()->json(['data' => $remolques]);
+        return response()->json(['data' => Remolque::all()]);
     }
 
     /**
      * Store a newly created resource in storage.
      */
-    public function store(StoreRemolqueRequest $request)
+    public function store(StoreRemolqueRequest $request): \Illuminate\Http\JsonResponse
     {
         $data = $request->validated();
-        $data['tenant_id'] = $this->tenantId;
+        $data['tenant_id'] = $this->tenantContext->getTenantId();
 
         $remolque = Remolque::create($data);
 
@@ -45,7 +41,7 @@ class RemolqueController extends Controller
     /**
      * Display the specified resource.
      */
-    public function show(Remolque $remolque)
+    public function show(Remolque $remolque): \Illuminate\Http\JsonResponse
     {
         return response()->json(['data' => $remolque]);
     }
@@ -53,7 +49,7 @@ class RemolqueController extends Controller
     /**
      * Update the specified resource in storage.
      */
-    public function update(UpdateRemolqueRequest $request, Remolque $remolque)
+    public function update(UpdateRemolqueRequest $request, Remolque $remolque): \Illuminate\Http\JsonResponse
     {
         $remolque->update($request->validated());
 
@@ -66,12 +62,10 @@ class RemolqueController extends Controller
     /**
      * Remove the specified resource from storage.
      */
-    public function destroy(Remolque $remolque)
+    public function destroy(Remolque $remolque): \Illuminate\Http\JsonResponse
     {
         $remolque->delete();
 
-        return response()->json([
-            'message' => 'Remolque eliminado correctamente.'
-        ], 204);
+        return response()->json(null, 204);
     }
 }

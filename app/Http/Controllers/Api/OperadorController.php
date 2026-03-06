@@ -10,29 +10,25 @@ use App\Services\TenantContext;
 
 class OperadorController extends Controller
 {
-    protected string $tenantId;
-
-    public function __construct(TenantContext $tenantContext)
+    public function __construct(protected TenantContext $tenantContext)
     {
-        $this->tenantId = $tenantContext->getTenantId();
     }
 
     /**
      * Display a listing of the resource.
      */
-    public function index()
+    public function index(): \Illuminate\Http\JsonResponse
     {
-        $operadores = Operador::all();
-        return response()->json(['data' => $operadores]);
+        return response()->json(['data' => Operador::all()]);
     }
 
     /**
      * Store a newly created resource in storage.
      */
-    public function store(StoreOperadorRequest $request)
+    public function store(StoreOperadorRequest $request): \Illuminate\Http\JsonResponse
     {
         $data = $request->validated();
-        $data['tenant_id'] = $this->tenantId;
+        $data['tenant_id'] = $this->tenantContext->getTenantId();
 
         $operador = Operador::create($data);
 
@@ -45,7 +41,7 @@ class OperadorController extends Controller
     /**
      * Display the specified resource.
      */
-    public function show(Operador $operadore)
+    public function show(Operador $operadore): \Illuminate\Http\JsonResponse
     {
         return response()->json(['data' => $operadore]);
     }
@@ -53,7 +49,7 @@ class OperadorController extends Controller
     /**
      * Update the specified resource in storage.
      */
-    public function update(UpdateOperadorRequest $request, Operador $operadore)
+    public function update(UpdateOperadorRequest $request, Operador $operadore): \Illuminate\Http\JsonResponse
     {
         $operadore->update($request->validated());
 
@@ -66,12 +62,10 @@ class OperadorController extends Controller
     /**
      * Remove the specified resource from storage.
      */
-    public function destroy(Operador $operadore)
+    public function destroy(Operador $operadore): \Illuminate\Http\JsonResponse
     {
         $operadore->delete();
 
-        return response()->json([
-            'message' => 'Operador eliminado correctamente.'
-        ], 204);
+        return response()->json(null, 204);
     }
 }

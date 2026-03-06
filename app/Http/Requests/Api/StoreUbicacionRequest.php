@@ -37,9 +37,16 @@ class StoreUbicacionRequest extends FormRequest
             'colonia' => ['nullable', 'string', 'max:100'],
             'municipio' => ['required', 'string', 'max:100'],
             'estado' => ['required', 'string', 'max:5'],
-            'pais' => ['nullable', 'string', 'max:3'],
-            'codigo_postal' => ['required', 'string', 'max:5'],
+            'pais' => ['nullable', 'string', 'size:3'],
+            'codigo_postal' => ['required', 'string', 'regex:/^[0-9]{5}$/'],
             'activo' => ['boolean'],
         ];
+    }
+    
+    protected function prepareForValidation()
+    {
+        if (empty($this->pais)) {
+            $this->merge(['pais' => 'MEX']);
+        }
     }
 }

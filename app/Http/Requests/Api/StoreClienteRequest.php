@@ -23,9 +23,9 @@ class StoreClienteRequest extends FormRequest
     {
         return [
             'nombre_razon_social' => ['required', 'string', 'max:255'],
-            'rfc' => ['required', 'string', 'max:13'], // The max length for a legal entity RFC is 12, and 13 for physical persons.
-            'regimen_fiscal' => ['required', 'string', 'max:10'],
-            'uso_cfdi' => ['required', 'string', 'max:10'],
+            'rfc' => ['required', 'string', 'regex:/^[A-Z&Ñ]{3,4}[0-9]{2}(0[1-9]|1[012])(0[1-9]|[12][0-9]|3[01])[A-Z0-9]{2}[A-Z0-9A]$/i'],
+            'regimen_fiscal' => ['required', 'string', 'size:3'],
+            'uso_cfdi' => ['required', 'string', 'size:3'],
             'correo' => ['nullable', 'email', 'max:255'],
             'telefono' => ['nullable', 'string', 'max:20'],
             'activo' => ['boolean'],

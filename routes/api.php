@@ -7,9 +7,19 @@ use App\Http\Controllers\Api\RemolqueController;
 use App\Http\Controllers\Api\UbicacionController;
 use App\Http\Controllers\Api\VehiculoController;
 use App\Http\Controllers\Api\ViajeController;
+use App\Http\Controllers\Api\MercanciaController;
 use Illuminate\Support\Facades\Route;
 
-/* |-------------------------------------------------------------------------- | API Routes — SaaS Carta Porte |-------------------------------------------------------------------------- | Todas las rutas pasan por TenantMiddleware, que lee el header X-Tenant-ID | y lo registra en TenantContext para que TenantScope filtre automáticamente | todas las consultas Eloquent por tenant_id. | | Prefijo base: /api/v1 */
+/*
+|--------------------------------------------------------------------------
+| API Routes — SaaS Carta Porte
+|--------------------------------------------------------------------------
+| Todas las rutas pasan por TenantMiddleware, que lee el header X-Tenant-ID
+| y lo registra en TenantContext para que TenantScope filtre automáticamente
+| todas las consultas Eloquent por tenant_id.
+|
+| Prefijo base: /api/v1
+*/
 
 Route::prefix('v1')
     ->middleware(['tenant'])
@@ -21,6 +31,7 @@ Route::prefix('v1')
         Route::apiResource('vehiculos', VehiculoController::class);
         Route::apiResource('remolques', RemolqueController::class);
         Route::apiResource('ubicaciones', UbicacionController::class);
+        Route::apiResource('mercancias', MercanciaController::class);
 
         // Operación
         Route::apiResource('viajes', ViajeController::class);

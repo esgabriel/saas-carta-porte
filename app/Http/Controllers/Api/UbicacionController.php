@@ -10,29 +10,25 @@ use App\Services\TenantContext;
 
 class UbicacionController extends Controller
 {
-    protected string $tenantId;
-
-    public function __construct(TenantContext $tenantContext)
+    public function __construct(protected TenantContext $tenantContext)
     {
-        $this->tenantId = $tenantContext->getTenantId();
     }
 
     /**
      * Display a listing of the resource.
      */
-    public function index()
+    public function index(): \Illuminate\Http\JsonResponse
     {
-        $ubicaciones = Ubicacion::all();
-        return response()->json(['data' => $ubicaciones]);
+        return response()->json(['data' => Ubicacion::all()]);
     }
 
     /**
      * Store a newly created resource in storage.
      */
-    public function store(StoreUbicacionRequest $request)
+    public function store(StoreUbicacionRequest $request): \Illuminate\Http\JsonResponse
     {
         $data = $request->validated();
-        $data['tenant_id'] = $this->tenantId;
+        $data['tenant_id'] = $this->tenantContext->getTenantId();
 
         $ubicacion = Ubicacion::create($data);
 
@@ -45,7 +41,7 @@ class UbicacionController extends Controller
     /**
      * Display the specified resource.
      */
-    public function show(Ubicacion $ubicasione)
+    public function show(Ubicacion $ubicasione): \Illuminate\Http\JsonResponse
     {
         return response()->json(['data' => $ubicasione]);
     }
@@ -53,7 +49,7 @@ class UbicacionController extends Controller
     /**
      * Update the specified resource in storage.
      */
-    public function update(UpdateUbicacionRequest $request, Ubicacion $ubicasione)
+    public function update(UpdateUbicacionRequest $request, Ubicacion $ubicasione): \Illuminate\Http\JsonResponse
     {
         $ubicasione->update($request->validated());
 
@@ -66,12 +62,10 @@ class UbicacionController extends Controller
     /**
      * Remove the specified resource from storage.
      */
-    public function destroy(Ubicacion $ubicasione)
+    public function destroy(Ubicacion $ubicasione): \Illuminate\Http\JsonResponse
     {
         $ubicasione->delete();
 
-        return response()->json([
-            'message' => 'Ubicación eliminada correctamente.'
-        ], 204);
+        return response()->json(null, 204);
     }
 }
