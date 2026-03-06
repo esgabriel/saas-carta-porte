@@ -28,6 +28,10 @@ class Operador extends Model
         'tipo_licencia',
         'vigencia_licencia',
         'activo',
+        'calle',
+        'municipio',
+        'estado',
+        'codigo_postal',
     ];
 
     protected $casts = [

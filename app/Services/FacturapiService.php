@@ -168,6 +168,13 @@ class FacturapiService implements FacturacionGatewayInterface
                 'RFCFigura'    => (string) ($operador->rfc ?? 'XAXX010101000'),
                 'NumLicencia'  => (string) $operador->num_licencia,
                 'NombreFigura' => (string) $operador->nombre,
+                'Domicilio'    => [
+                    'Calle'        => $operador->calle ?? 'Sin calle',
+                    'CodigoPostal' => $operador->codigo_postal,
+                    'Estado'       => $operador->estado,
+                    'Municipio'    => $operador->municipio ?? '',
+                    'Pais'         => 'MEX',
+                ],
             ],
         ];
     }

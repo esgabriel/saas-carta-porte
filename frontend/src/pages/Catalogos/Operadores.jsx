@@ -13,6 +13,7 @@ import {
 const INITIAL = {
     nombre: '', rfc: '', curp: '', num_licencia: '',
     tipo_licencia: 'E', vigencia_licencia: '',
+    calle: '', municipio: '', estado: '', codigo_postal: '',
 };
 
 export default function Operadores() {
@@ -118,6 +119,29 @@ export default function Operadores() {
                                     <Input name="vigencia_licencia" type="date" value={form.vigencia_licencia}
                                         onChange={handleChange} required className="h-12" />
                                 </div>
+                            </div>
+                            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider pt-2">Domicilio (requerido para Carta Porte)</p>
+                            <div className="space-y-2">
+                                <Label>Calle y número</Label>
+                                <Input name="calle" placeholder="Av. Reforma 123" value={form.calle}
+                                    onChange={handleChange} className="h-12" />
+                            </div>
+                            <div className="grid grid-cols-2 gap-3">
+                                <div className="space-y-2">
+                                    <Label>Municipio</Label>
+                                    <Input name="municipio" placeholder="Monterrey" value={form.municipio}
+                                        onChange={handleChange} className="h-12" />
+                                </div>
+                                <div className="space-y-2">
+                                    <Label>Estado</Label>
+                                    <Input name="estado" placeholder="Nuevo León" value={form.estado}
+                                        onChange={handleChange} className="h-12" />
+                                </div>
+                            </div>
+                            <div className="space-y-2">
+                                <Label>Código Postal</Label>
+                                <Input name="codigo_postal" placeholder="64000" value={form.codigo_postal}
+                                    onChange={handleChange} className="h-12" maxLength={5} />
                             </div>
                         </form>
                         <DrawerFooter>
