@@ -27,6 +27,18 @@ class TimbrarViajeJob implements ShouldQueue
      */
     public function handle(FacturacionGatewayInterface $facturacionGateway): void
     {
+        // Recargar relaciones desde la BD para asegurar datos frescos en el worker
+        $this->viaje->load([
+            'tenant',
+            'cliente',
+            'vehiculo.seguros',
+            'operador',
+            'remolque',
+            'ubicacionOrigen',
+            'ubicacionDestino',
+            'mercancias',
+        ]);
+
         // Buscar el registro CartaPorte asociado al viaje para actualizar estatus
         $cartaPorte = CartaPorte::where('viaje_id', $this->viaje->id)->first();
 

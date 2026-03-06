@@ -5,81 +5,65 @@ namespace App\Services;
 use App\Models\Viaje;
 use App\Contracts\FacturacionGatewayInterface;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Str;
 use Exception;
 
 class FacturapiService implements FacturacionGatewayInterface
 {
     protected string $baseUrl = 'https://www.facturapi.io/v2';
 
-    /**
-     * Envía la estructura JSON a Facturapi para crear y timbrar el CFDI de Ingreso con Carta Porte.
-     *
-     * @param Viaje $viaje Ojecto viaje ya cargado con su relaciones (cliente, vehiculo, operador, mercancias, etc.)
-     * @return array Respuesta parseada de la API de Facturapi
-     * @throws Exception Si la llamada HTTP falla o la API retorna error
-     */
     public function timbrarViaje(Viaje $viaje): array
     {
-        // 1. Obtener el API Key descifrado del Tenant asociado al Viaje
         $apiKey = $viaje->tenant->api_key_facturapi;
 
         if (!$apiKey) {
             throw new Exception("El tenant no tiene configurada una API Key de Facturapi.");
         }
 
-        // 2. Construir el payload masivo para Facturapi (CFDI Ingreso + Complemento Carta Porte)
-        // Nota: Esta estructura es un mapeo básico de demostración según la doc de Facturapi para Carta Porte 3.0/3.1
         $payload = [
-            'type' => 'I', // CFDI de Ingreso
-            'customer' => [
+            'type'         => 'I',
+            'payment_form' => '99',
+            'customer'     => [
                 'legal_name' => $viaje->cliente->nombre_razon_social,
-                'tax_id' => $viaje->cliente->rfc,
+                'tax_id'     => $viaje->cliente->rfc,
                 'tax_system' => $viaje->cliente->regimen_fiscal,
-                'email' => $viaje->cliente->correo,
-                // Facturapi requiere zip del receiver para 4.0
-                'address' => [
-                    'zip' => '00000' // En un entorno real se obtendría de la dir del cliente o ubicacion
-                ]
+                'email'      => $viaje->cliente->correo ?? 'sin@correo.com',
+                'address'    => [
+                    'zip' => '06600',
+                ],
             ],
-            // Usos CFDI, Moneda, etc...
-            'use' => $viaje->cliente->uso_cfdi ?? 'S01',
-
-            // Items factura (Servicio de transporte cobrado) - Simplificado
+            'use'   => $viaje->cliente->uso_cfdi ?? 'S01',
             'items' => [
                 [
                     'quantity' => 1,
-                    'product' => [
+                    'product'  => [
                         'description' => 'Servicios de transporte de carga',
-                        'product_key' => '78101802', // Flete
-                        'price' => 10000, // Costo genérico del ejemplo
-                        'unit_key' => 'E48' // Unidad de servicio
-                    ]
-                ]
+                        'product_key' => '78101802',
+                        'price'       => 10000,
+                        'unit_key'    => 'E48',
+                    ],
+                ],
             ],
-
-            // Complemento Carta Porte
             'complements' => [
                 [
                     'type' => 'carta_porte',
                     'data' => [
-                        'transp_internac' => 'No',
-                        'total_dist_rec' => $viaje->distancia_recorrida,
-
-                        'ubicaciones' => $this->mapUbicaciones($viaje),
-                        'mercancias' => $this->mapMercancias($viaje),
-                        'figura_transporte' => $this->mapFiguraTransporte($viaje)
-                    ]
-                ]
-            ]
+                        'IdCCP'          => (string) Str::uuid(),
+                        'TranspInternac' => 'No',
+                        'TotalDistRec'   => (float) ($viaje->distancia_recorrida ?? 1),
+                        'Ubicaciones'    => $this->mapUbicaciones($viaje),
+                        'Mercancias'     => $this->mapMercancias($viaje),
+                        'FiguraTransporte' => $this->mapFiguraTransporte($viaje),
+                    ],
+                ],
+            ],
         ];
 
-        // 3. Ejecutar la llamada a la API
         $response = Http::withToken($apiKey)
             ->post("{$this->baseUrl}/invoices", $payload);
 
-        // 4. Manejar errores HTTP (4xx, 5xx devueltos por Facturapi)
         if ($response->failed()) {
-            $errorData = $response->json();
+            $errorData    = $response->json();
             $errorMessage = $errorData['message'] ?? $response->body();
             throw new Exception("Error al timbrar en Facturapi: " . $errorMessage);
         }
@@ -89,81 +73,89 @@ class FacturapiService implements FacturacionGatewayInterface
 
     private function mapUbicaciones(Viaje $viaje): array
     {
-        $origen = $viaje->ubicacionOrigen;
+        $origen  = $viaje->ubicacionOrigen;
         $destino = $viaje->ubicacionDestino;
 
         return [
             [
-                'tipo_ubicacion' => 'Origen',
-                'rfc_remitente_destinatario' => $origen->rfc_remitente,
-                'nombre_remitente_destinatario' => $origen->nombre_remitente,
-                'fecha_hora_salida_llegada' => $viaje->fecha_hora_salida->format('Y-m-d\TH:i:s'),
-                'domicilio' => [
-                    'calle' => $origen->calle,
-                    'estado' => $origen->estado,
-                    'pais' => $origen->pais,
-                    'codigo_postal' => $origen->codigo_postal,
-                ]
+                'TipoUbicacion'               => 'Origen',
+                'RFCRemitenteDestinatario'    => $origen->rfc_remitente ?? 'XAXX010101000',
+                'NombreRemitenteDestinatario' => $origen->nombre_remitente ?? 'PUBLICO EN GENERAL',
+                'FechaHoraSalidaLlegada'      => $viaje->fecha_hora_salida->format('Y-m-d\TH:i:s'),
+                'Domicilio' => [
+                    'Calle'        => $origen->calle ?? 'Sin calle',
+                    'Estado'       => $origen->estado,
+                    'Pais'         => $origen->pais ?? 'MEX',
+                    'CodigoPostal' => $origen->codigo_postal,
+                ],
             ],
             [
-                'tipo_ubicacion' => 'Destino',
-                'distancia_recorrida' => $viaje->distancia_recorrida,
-                'fecha_hora_salida_llegada' => $viaje->fecha_hora_llegada_est
+                'TipoUbicacion'               => 'Destino',
+                'RFCRemitenteDestinatario'    => $destino->rfc_remitente ?? 'XAXX010101000',
+                'NombreRemitenteDestinatario' => $destino->nombre_remitente ?? 'PUBLICO EN GENERAL',
+                'DistanciaRecorrida'          => (float) ($viaje->distancia_recorrida ?? 1),
+                'FechaHoraSalidaLlegada'      => $viaje->fecha_hora_llegada_est
                     ? $viaje->fecha_hora_llegada_est->format('Y-m-d\TH:i:s')
                     : $viaje->fecha_hora_salida->addDay()->format('Y-m-d\TH:i:s'),
-                'domicilio' => [
-                    'calle' => $destino->calle,
-                    'estado' => $destino->estado,
-                    'pais' => $destino->pais,
-                    'codigo_postal' => $destino->codigo_postal,
-                ]
+                'Domicilio' => [
+                    'Calle'        => $destino->calle ?? 'Sin calle',
+                    'Estado'       => $destino->estado,
+                    'Pais'         => $destino->pais ?? 'MEX',
+                    'CodigoPostal' => $destino->codigo_postal,
+                ],
             ],
         ];
     }
 
     private function mapMercancias(Viaje $viaje): array
     {
-        $pesoBrutoTotal = 0;
+        $pesoBrutoTotal     = 0;
         $numTotalMercancias = $viaje->mercancias->count();
-        $mercanciasArray = [];
+        $mercanciasArray    = [];
 
         foreach ($viaje->mercancias as $mercancia) {
-            $pesoBrutoTotal += $mercancia->peso_en_kg;
-            $mercanciasArray[] = [
-                'bienes_transp' => $mercancia->clave_prod_stcc,
-                'descripcion' => $mercancia->descripcion,
-                'cantidad' => $mercancia->cantidad,
-                'clave_unidad' => $mercancia->clave_unidad,
-                'peso_en_kg' => $mercancia->peso_en_kg,
-                'valor_mercancia' => $mercancia->valor_mercancia,
-                'moneda' => $mercancia->moneda,
-                'material_peligroso' => $mercancia->material_peligroso ? 'Sí' : 'No',
-                'cve_material_peligroso' => $mercancia->cve_material_peligroso,
+            $pesoBrutoTotal += (float) $mercancia->peso_en_kg;
+
+            $item = [
+                'BienesTransp'   => (string) $mercancia->clave_prod_stcc,
+                'Descripcion'    => (string) $mercancia->descripcion,
+                'Cantidad'       => (float) $mercancia->cantidad,
+                'ClaveUnidad'    => (string) $mercancia->clave_unidad,
+                'PesoEnKg'       => (float) $mercancia->peso_en_kg,
+                'ValorMercancia' => (float) ($mercancia->valor_mercancia ?? 0),
+                'Moneda'         => (string) ($mercancia->moneda ?? 'MXN'),
+                'MaterialPeligroso' => $mercancia->material_peligroso ? 'Sí' : 'No',
             ];
+
+            if ($mercancia->material_peligroso && $mercancia->cve_material_peligroso) {
+                $item['CveMaterialPeligroso'] = (string) $mercancia->cve_material_peligroso;
+            }
+
+            $mercanciasArray[] = $item;
         }
 
         return [
-            'peso_bruto_total' => $pesoBrutoTotal,
-            'unidad_peso' => 'KGM',
-            'num_total_mercancias' => $numTotalMercancias,
-            'mercancia' => $mercanciasArray,
-            'autotransporte' => [
-                'perm_sct' => $viaje->vehiculo->tipo_permiso_sct,
-                'num_permiso_sct' => $viaje->vehiculo->num_permiso_sct,
-                'identificacion_vehicular' => [
-                    'config_vehicular' => $viaje->vehiculo->config_vehicular,
-                    'placa_vm' => $viaje->vehiculo->placa,
-                    'anio_modelo_vm' => $viaje->vehiculo->anio_modelo,
+            'PesoBrutoTotal'     => (float) $pesoBrutoTotal,
+            'UnidadPeso'         => 'KGM',
+            'NumTotalMercancias' => (int) $numTotalMercancias,
+            'Mercancia'          => $mercanciasArray,
+            'Autotransporte'     => [
+                'PermSCT'        => (string) $viaje->vehiculo->tipo_permiso_sct,
+                'NumPermisoSCT'  => (string) $viaje->vehiculo->num_permiso_sct,
+                'IdentificacionVehicular' => [
+                    'ConfigVehicular'    => (string) $viaje->vehiculo->config_vehicular,
+                    'PlacaVM'            => (string) $viaje->vehiculo->placa,
+                    'AnioModeloVM'       => (string) $viaje->vehiculo->anio_modelo,
+                    'PesoBrutoVehicular' => (float) $viaje->vehiculo->peso_bruto_vehicular,
                 ],
-                // El SAT pide póliza de seguro mínimo de Responsabilidad Civil. Mapendo hardcodeado para el ejemplo
-                'seguros' => $this->mapSeguros($viaje),
-                'remolques' => $viaje->remolque ? [
+                'Seguros'  => $this->mapSeguros($viaje),
+                'Remolques' => $viaje->remolque ? [
                     [
-                        'sub_tipo_rem' => $viaje->remolque->subtipo_rem,
-                        'placa' => $viaje->remolque->placa,
-                    ]
-                ] : []
-            ]
+                        'SubTipoRem' => (string) $viaje->remolque->subtipo_rem,
+                        'Placa'      => (string) $viaje->remolque->placa,
+                    ],
+                ] : [],
+            ],
         ];
     }
 
@@ -172,42 +164,41 @@ class FacturapiService implements FacturacionGatewayInterface
         $operador = $viaje->operador;
         return [
             [
-                'tipo_figura' => '01', // Operador
-                'rfc_figura' => $operador->rfc,
-                'num_licencia' => $operador->num_licencia,
-                'nombre_figura' => $operador->nombre,
-            ]
+                'TipoFigura'   => '01',
+                'RFCFigura'    => (string) ($operador->rfc ?? 'XAXX010101000'),
+                'NumLicencia'  => (string) $operador->num_licencia,
+                'NombreFigura' => (string) $operador->nombre,
+            ],
         ];
     }
-    
+
     private function mapSeguros(Viaje $viaje): array
     {
         $seguros = $viaje->vehiculo->seguros;
-
-        $rc = $seguros->firstWhere('tipo', 'responsabilidad_civil');
+        $rc      = $seguros->firstWhere('tipo', 'responsabilidad_civil');
 
         if (!$rc) {
             throw new Exception(
-                "El vehículo con placa '{$viaje->vehiculo->placa}' no tiene una póliza de " .
-                "Responsabilidad Civil registrada. El SAT la requiere para timbrar."
+                "El vehículo con placa '{$viaje->vehiculo->placa}' no tiene póliza de " .
+                "Responsabilidad Civil. El SAT la requiere para timbrar."
             );
         }
 
         $segurosCfdi = [
-            'asegura_resp_civil' => $rc->aseguradora,
-            'poliza_resp_civil'  => $rc->num_poliza,
+            'AseguraRespCivil' => (string) $rc->aseguradora,
+            'PolizaRespCivil'  => (string) $rc->num_poliza,
         ];
 
         $carga = $seguros->firstWhere('tipo', 'carga');
         if ($carga) {
-            $segurosCfdi['asegura_carga']  = $carga->aseguradora;
-            $segurosCfdi['poliza_carga']   = $carga->num_poliza;
+            $segurosCfdi['AseguraCarga'] = (string) $carga->aseguradora;
+            $segurosCfdi['PolizaCarga']  = (string) $carga->num_poliza;
         }
 
         $medioAmbiente = $seguros->firstWhere('tipo', 'medio_ambiente');
         if ($medioAmbiente) {
-            $segurosCfdi['asegura_med_ambiente']  = $medioAmbiente->aseguradora;
-            $segurosCfdi['poliza_med_ambiente']   = $medioAmbiente->num_poliza;
+            $segurosCfdi['AseguraMedAmbiente'] = (string) $medioAmbiente->aseguradora;
+            $segurosCfdi['PolizaMedAmbiente']  = (string) $medioAmbiente->num_poliza;
         }
 
         return $segurosCfdi;
