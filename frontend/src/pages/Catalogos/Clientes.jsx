@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import api from "@/lib/api";
-import { Plus, User, Mail, Phone, Building2 } from "lucide-react";
+import { Plus, User, Mail, Phone, Building2, Trash2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -73,6 +73,16 @@ export default function Clientes() {
         }
     };
 
+    const handleDelete = async (id) => {
+        if (!window.confirm("¿Seguro que deseas eliminar este cliente?")) return;
+        try {
+            await api.delete(`/clientes/${id}`);
+            fetchClientes();
+        } catch (error) {
+            console.error("Error eliminando cliente:", error);
+        }
+    };
+
     return (
         <div className="pb-24"> {/* Extra padding bottom for FAB */}
             <h1 className="text-2xl font-bold mb-6">Directorio de Clientes</h1>
@@ -88,7 +98,7 @@ export default function Clientes() {
             ) : (
                 <div className="grid gap-4">
                     {clientes.map((cliente) => (
-                        <Card key={cliente.id} className="overflow-hidden shadow-sm active:scale-[0.98] transition-all">
+                        <Card key={cliente.id} className="overflow-hidden shadow-sm active:scale-[0.98] transition-all relative group">
                             <CardContent className="p-4">
                                 <div className="flex justify-between items-start mb-2">
                                     <div className="flex-1">
@@ -99,6 +109,15 @@ export default function Clientes() {
                                             {cliente.rfc}
                                         </span>
                                     </div>
+                                    <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-8 w-8 text-destructive opacity-80 hover:opacity-100 hover:bg-destructive/10"
+                                        onClick={() => handleDelete(cliente.id)}
+                                        title="Eliminar cliente"
+                                    >
+                                        <Trash2 className="h-4 w-4" />
+                                    </Button>
                                 </div>
 
                                 {/* Info adicional para contexto móvil rápido */}
