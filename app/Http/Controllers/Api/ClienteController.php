@@ -61,9 +61,23 @@ class ClienteController extends Controller
 
     /**
      * Remove the specified resource from storage.
+     *
+     * Si el cliente tiene viajes asociados se devuelve 409 con el conteo
+     * para que el frontend ofrezca la opción de desactivarlo en su lugar.
      */
     public function destroy(Cliente $cliente): \Illuminate\Http\JsonResponse
     {
+        $viajesCount = $cliente->viajes()->count();
+
+        if ($viajesCount > 0) {
+            return response()->json([
+                'message'      => "Este cliente tiene {$viajesCount} " .
+                                  ($viajesCount === 1 ? 'viaje asociado' : 'viajes asociados') .
+                                  '. Puedes desactivarlo para que no aparezca en nuevos viajes.',
+                'viajes_count' => $viajesCount,
+            ], 409);
+        }
+
         $cliente->delete();
 
         return response()->json(null, 204);
