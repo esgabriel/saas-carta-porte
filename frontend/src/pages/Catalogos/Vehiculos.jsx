@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import api from '@/lib/api';
-import { Plus, Shield } from 'lucide-react';
+import {
+    Plus, Shield, Trash2, Pencil, RotateCcw, AlertTriangle,
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -10,22 +12,32 @@ import {
     DrawerFooter, DrawerHeader, DrawerTitle, DrawerTrigger,
 } from '@/components/ui/drawer';
 
-const INITIAL_V = {
+const EMPTY_V = {
     placa: '', anio_modelo: '', config_vehicular: '', peso_bruto_vehicular: '',
     tipo_permiso_sct: '', num_permiso_sct: '', num_serie: '',
 };
-const INITIAL_S = {
+const EMPTY_S = {
     aseguradora: '', num_poliza: '', vigencia_inicio: '', vigencia_fin: '',
 };
+
+const IDLE = null;
 
 export default function Vehiculos() {
     const [vehiculos, setVehiculos] = useState([]);
     const [loading, setLoading] = useState(true);
-    const [isOpen, setIsOpen] = useState(false);
-    const [vForm, setVForm] = useState(INITIAL_V);
-    const [sForm, setSForm] = useState(INITIAL_S);
+    const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+    const [editingVehiculo, setEditingVehiculo] = useState(null); // null = crear
+    const [vForm, setVForm] = useState(EMPTY_V);
+    const [sForm, setSForm] = useState(EMPTY_S);
     const [saving, setSaving] = useState(false);
-    const [error, setError] = useState('');
+    const [formError, setFormError] = useState('');
+
+    // Map<vehiculoId, estado-de-confirmacion>
+    const [deleteState, setDeleteState] = useState({});
+
+    // -------------------------------------------------------------------------
+    // Data
+    // -------------------------------------------------------------------------
 
     const fetchAll = async () => {
         try {
@@ -37,43 +49,214 @@ export default function Vehiculos() {
 
     useEffect(() => { fetchAll(); }, []);
 
-    const handleV = e => setVForm(p => ({ ...p, [e.target.name]: e.target.value }));
-    const handleS = e => setSForm(p => ({ ...p, [e.target.name]: e.target.value }));
+    // -------------------------------------------------------------------------
+    // Drawer helpers
+    // -------------------------------------------------------------------------
 
-    const handleSubmit = async e => {
+    const openCreate = () => {
+        setEditingVehiculo(null);
+        setVForm(EMPTY_V);
+        setSForm(EMPTY_S);
+        setFormError('');
+        setIsDrawerOpen(true);
+    };
+
+    const openEdit = (v) => {
+        setEditingVehiculo(v);
+        setVForm({
+            placa: v.placa ?? '',
+            anio_modelo: v.anio_modelo ?? '',
+            config_vehicular: v.config_vehicular ?? '',
+            peso_bruto_vehicular: v.peso_bruto_vehicular ?? '',
+            tipo_permiso_sct: v.tipo_permiso_sct ?? '',
+            num_permiso_sct: v.num_permiso_sct ?? '',
+            num_serie: v.num_serie ?? '',
+        });
+        setFormError('');
+        setIsDrawerOpen(true);
+    };
+
+    const handleV = (e) => setVForm((p) => ({ ...p, [e.target.name]: e.target.value }));
+    const handleS = (e) => setSForm((p) => ({ ...p, [e.target.name]: e.target.value }));
+
+    const handleSubmit = async (e) => {
         e.preventDefault();
         setSaving(true);
-        setError('');
+        setFormError('');
         try {
-            // 1. Crear vehículo
-            const vRes = await api.post('/vehiculos', {
-                ...vForm,
-                anio_modelo: parseInt(vForm.anio_modelo),
-                peso_bruto_vehicular: parseFloat(vForm.peso_bruto_vehicular),
-            });
-            const vehiculoId = vRes.data.data.id;
-
-            // 2. Crear seguro RC inmediatamente
-            await api.post('/seguros', {
-                vehiculo_id: vehiculoId,
-                tipo: 'responsabilidad_civil',
-                aseguradora: sForm.aseguradora,
-                num_poliza: sForm.num_poliza,
-                vigencia_inicio: sForm.vigencia_inicio,
-                vigencia_fin: sForm.vigencia_fin,
-            });
-
-            setIsOpen(false);
-            setVForm(INITIAL_V);
-            setSForm(INITIAL_S);
+            if (editingVehiculo) {
+                // Editar: solo datos del vehículo (seguros en pantalla separada)
+                await api.patch(`/vehiculos/${editingVehiculo.id}`, {
+                    ...vForm,
+                    anio_modelo: parseInt(vForm.anio_modelo),
+                    peso_bruto_vehicular: parseFloat(vForm.peso_bruto_vehicular),
+                });
+            } else {
+                // Crear: vehículo + seguro RC
+                const vRes = await api.post('/vehiculos', {
+                    ...vForm,
+                    anio_modelo: parseInt(vForm.anio_modelo),
+                    peso_bruto_vehicular: parseFloat(vForm.peso_bruto_vehicular),
+                });
+                const vehiculoId = vRes.data.data.id;
+                await api.post('/seguros', {
+                    vehiculo_id: vehiculoId,
+                    tipo: 'responsabilidad_civil',
+                    aseguradora: sForm.aseguradora,
+                    num_poliza: sForm.num_poliza,
+                    vigencia_inicio: sForm.vigencia_inicio,
+                    vigencia_fin: sForm.vigencia_fin,
+                });
+            }
+            setIsDrawerOpen(false);
             fetchAll();
-        } catch (e) {
-            const msg = e.response?.data?.message || JSON.stringify(e.response?.data?.errors) || e.message;
-            setError(msg);
+        } catch (err) {
+            const msg = err.response?.data?.message
+                || JSON.stringify(err.response?.data?.errors)
+                || err.message;
+            setFormError(msg);
         } finally {
             setSaving(false);
         }
     };
+
+    // -------------------------------------------------------------------------
+    // Delete / Deactivate flow
+    // -------------------------------------------------------------------------
+
+    const setCardState = (id, state) =>
+        setDeleteState((prev) => ({ ...prev, [id]: state }));
+
+    const handleDeleteClick = (id) => {
+        setCardState(id, { step: 'confirm' });
+    };
+
+    const handleDeleteConfirm = async (id) => {
+        setCardState(id, { step: 'loading' });
+        try {
+            await api.delete(`/vehiculos/${id}`);
+            setVehiculos((prev) => prev.filter((v) => v.id !== id));
+            setCardState(id, IDLE);
+        } catch (error) {
+            if (error.response?.status === 409) {
+                const { message, viajes_count } = error.response.data;
+                setCardState(id, { step: 'conflict', message, count: viajes_count });
+            } else {
+                console.error('Error eliminando vehículo:', error);
+                setCardState(id, IDLE);
+            }
+        }
+    };
+
+    const handleDeactivate = async (id) => {
+        setCardState(id, { step: 'loading' });
+        try {
+            await api.patch(`/vehiculos/${id}`, { activo: false });
+            setVehiculos((prev) =>
+                prev.map((v) => (v.id === id ? { ...v, activo: false } : v))
+            );
+        } catch (error) {
+            console.error('Error desactivando vehículo:', error);
+        } finally {
+            setCardState(id, IDLE);
+        }
+    };
+
+    const handleReactivate = async (id) => {
+        try {
+            await api.patch(`/vehiculos/${id}`, { activo: true });
+            setVehiculos((prev) =>
+                prev.map((v) => (v.id === id ? { ...v, activo: true } : v))
+            );
+        } catch (error) {
+            console.error('Error reactivando vehículo:', error);
+        }
+    };
+
+    const cancelDelete = (id) => setCardState(id, IDLE);
+
+    // -------------------------------------------------------------------------
+    // Render helpers
+    // -------------------------------------------------------------------------
+
+    const renderCardActions = (v) => {
+        const ds = deleteState[v.id];
+
+        if (!ds) {
+            return (
+                <div className="flex gap-1">
+                    <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                        onClick={() => openEdit(v)}
+                        title="Editar vehículo"
+                    >
+                        <Pencil className="h-4 w-4" />
+                    </Button>
+                    {v.activo !== false ? (
+                        <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-destructive opacity-70 hover:opacity-100 hover:bg-destructive/10"
+                            onClick={() => handleDeleteClick(v.id)}
+                            title="Eliminar vehículo"
+                        >
+                            <Trash2 className="h-4 w-4" />
+                        </Button>
+                    ) : (
+                        <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-green-600 hover:bg-green-50"
+                            onClick={() => handleReactivate(v.id)}
+                            title="Reactivar vehículo"
+                        >
+                            <RotateCcw className="h-4 w-4" />
+                        </Button>
+                    )}
+                </div>
+            );
+        }
+
+        if (ds.step === 'loading') {
+            return (
+                <div className="h-8 w-8 flex items-center justify-center">
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-muted-foreground" />
+                </div>
+            );
+        }
+
+        if (ds.step === 'confirm') {
+            return (
+                <div className="flex items-center gap-2 animate-in fade-in slide-in-from-right-2">
+                    <span className="text-xs text-muted-foreground whitespace-nowrap">¿Eliminar?</span>
+                    <Button
+                        size="sm"
+                        variant="destructive"
+                        className="h-7 px-2 text-xs"
+                        onClick={() => handleDeleteConfirm(v.id)}
+                    >
+                        Sí
+                    </Button>
+                    <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-7 px-2 text-xs"
+                        onClick={() => cancelDelete(v.id)}
+                    >
+                        No
+                    </Button>
+                </div>
+            );
+        }
+
+        return null; // conflict se renderiza en la card
+    };
+
+    // -------------------------------------------------------------------------
+    // JSX
+    // -------------------------------------------------------------------------
 
     return (
         <div className="pb-24">
@@ -86,38 +269,105 @@ export default function Vehiculos() {
             ) : vehiculos.length === 0 ? (
                 <p className="text-center p-8 text-muted-foreground">Sin vehículos registrados.</p>
             ) : (
-                <div className="grid gap-3">
-                    {vehiculos.map(v => (
-                        <Card key={v.id}>
-                            <CardContent className="p-4">
-                                <p className="font-semibold font-mono text-lg">{v.placa}</p>
-                                <p className="text-sm text-muted-foreground">
-                                    {v.anio_modelo} · {v.config_vehicular} · {v.peso_bruto_vehicular} kg
-                                </p>
-                                <p className="text-xs text-muted-foreground mt-1">
-                                    Permiso SCT: {v.num_permiso_sct}
-                                </p>
-                            </CardContent>
-                        </Card>
-                    ))}
+                <div className="grid gap-4">
+                    {vehiculos.map((v) => {
+                        const ds = deleteState[v.id];
+                        const isInactive = v.activo === false;
+                        const isConflict = ds?.step === 'conflict';
+
+                        return (
+                            <Card
+                                key={v.id}
+                                className={`overflow-hidden shadow-sm transition-all ${isInactive ? 'opacity-50' : 'active:scale-[0.98]'}`}
+                            >
+                                <CardContent className="p-4">
+                                    {/* Cabecera: placa + acciones */}
+                                    <div className="flex justify-between items-start mb-2">
+                                        <div className="flex-1 min-w-0">
+                                            <h2 className="text-lg font-bold font-mono leading-tight break-words pr-2">
+                                                {v.placa}
+                                            </h2>
+                                            <div className="flex items-center gap-2 mt-1 flex-wrap">
+                                                <span className="inline-block px-2 py-0.5 bg-muted text-muted-foreground text-xs rounded">
+                                                    {v.anio_modelo} · {v.config_vehicular}
+                                                </span>
+                                                {isInactive && (
+                                                    <span className="inline-block px-2 py-0.5 bg-yellow-100 text-yellow-700 text-xs font-semibold rounded">
+                                                        Inactivo
+                                                    </span>
+                                                )}
+                                            </div>
+                                        </div>
+                                        {renderCardActions(v)}
+                                    </div>
+
+                                    {/* Info adicional */}
+                                    <div className="mt-2 flex flex-col gap-1 text-sm text-muted-foreground">
+                                        <div>{v.peso_bruto_vehicular} kg · Permiso SCT: {v.num_permiso_sct}</div>
+                                    </div>
+
+                                    {/* Banner de conflicto (409) */}
+                                    {isConflict && (
+                                        <div className="mt-3 p-3 rounded-lg bg-amber-50 border border-amber-200 animate-in fade-in slide-in-from-bottom-2">
+                                            <div className="flex items-start gap-2 mb-3">
+                                                <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+                                                <p className="text-xs text-amber-800 leading-snug">
+                                                    {ds.message}
+                                                </p>
+                                            </div>
+                                            <div className="flex gap-2">
+                                                <Button
+                                                    size="sm"
+                                                    className="h-8 px-3 text-xs bg-amber-600 hover:bg-amber-700 text-white"
+                                                    onClick={() => handleDeactivate(v.id)}
+                                                >
+                                                    Desactivar
+                                                </Button>
+                                                <Button
+                                                    size="sm"
+                                                    variant="ghost"
+                                                    className="h-8 px-3 text-xs"
+                                                    onClick={() => cancelDelete(v.id)}
+                                                >
+                                                    Cancelar
+                                                </Button>
+                                            </div>
+                                        </div>
+                                    )}
+                                </CardContent>
+                            </Card>
+                        );
+                    })}
                 </div>
             )}
 
+            {/* FAB + Drawer (crear / editar) */}
             <div className="fixed bottom-6 right-6 z-40 md:static md:mt-8 md:flex md:justify-end">
-                <Drawer open={isOpen} onOpenChange={v => { setIsOpen(v); if (!v) setError(''); }}>
+                <Drawer open={isDrawerOpen} onOpenChange={(v) => { setIsDrawerOpen(v); if (!v) setFormError(''); }}>
                     <DrawerTrigger asChild>
-                        <Button size="icon" className="h-14 w-14 rounded-full shadow-lg md:w-auto md:h-11 md:px-6 md:rounded-md">
+                        <Button
+                            size="icon"
+                            className="h-14 w-14 rounded-full shadow-lg md:w-auto md:h-11 md:px-6 md:rounded-md"
+                            onClick={openCreate}
+                        >
                             <Plus className="h-6 w-6 md:mr-2" />
                             <span className="hidden md:inline font-semibold">Nuevo Vehículo</span>
                         </Button>
                     </DrawerTrigger>
+
                     <DrawerContent className="max-h-[90vh]">
                         <DrawerHeader className="text-left">
-                            <DrawerTitle className="text-xl">Nuevo Vehículo</DrawerTitle>
-                            <DrawerDescription>Datos de la unidad y su póliza de seguro RC (requerida por el SAT).</DrawerDescription>
+                            <DrawerTitle className="text-xl">
+                                {editingVehiculo ? 'Editar Vehículo' : 'Nuevo Vehículo'}
+                            </DrawerTitle>
+                            <DrawerDescription>
+                                {editingVehiculo
+                                    ? 'Modifica los datos de la unidad y guarda los cambios.'
+                                    : 'Datos de la unidad y su póliza de seguro RC (requerida por el SAT).'}
+                            </DrawerDescription>
                         </DrawerHeader>
-                        <form id="vehiculoForm" onSubmit={handleSubmit} className="p-4 flex flex-col gap-4 overflow-y-auto">
 
+                        <form id="vehiculoForm" onSubmit={handleSubmit} className="p-4 flex flex-col gap-4 overflow-y-auto">
                             {/* Datos del vehículo */}
                             <div className="space-y-2">
                                 <Label>Placa *</Label>
@@ -150,44 +400,56 @@ export default function Vehiculos() {
                                 <Input name="num_serie" placeholder="1HGBH41JXMN109186" value={vForm.num_serie} onChange={handleV} className="h-12 font-mono" />
                             </div>
 
-                            {/* Seguro RC — requerido por SAT */}
-                            <div className="border-t pt-4 mt-2">
-                                <div className="flex items-center gap-2 mb-4">
-                                    <Shield className="h-4 w-4 text-primary" />
-                                    <p className="font-semibold text-sm">Seguro de Responsabilidad Civil</p>
-                                    <span className="text-xs bg-red-100 text-red-600 px-2 py-0.5 rounded-full">Requerido SAT</span>
-                                </div>
-                                <div className="flex flex-col gap-4">
-                                    <div className="space-y-2">
-                                        <Label>Aseguradora *</Label>
-                                        <Input name="aseguradora" placeholder="Ej. GNP Seguros" value={sForm.aseguradora} onChange={handleS} required className="h-12" />
+                            {/* Seguro RC — solo al crear (al editar se gestiona en pantalla separada) */}
+                            {!editingVehiculo && (
+                                <div className="border-t pt-4 mt-2">
+                                    <div className="flex items-center gap-2 mb-4">
+                                        <Shield className="h-4 w-4 text-primary" />
+                                        <p className="font-semibold text-sm">Seguro de Responsabilidad Civil</p>
+                                        <span className="text-xs bg-red-100 text-red-600 px-2 py-0.5 rounded-full">Requerido SAT</span>
                                     </div>
-                                    <div className="space-y-2">
-                                        <Label>Número de póliza *</Label>
-                                        <Input name="num_poliza" placeholder="POL-123456" value={sForm.num_poliza} onChange={handleS} required className="h-12" />
-                                    </div>
-                                    <div className="grid grid-cols-2 gap-3">
+                                    <div className="flex flex-col gap-4">
                                         <div className="space-y-2">
-                                            <Label>Inicio vigencia *</Label>
-                                            <Input name="vigencia_inicio" type="date" value={sForm.vigencia_inicio} onChange={handleS} required className="h-12" />
+                                            <Label>Aseguradora *</Label>
+                                            <Input name="aseguradora" placeholder="Ej. GNP Seguros" value={sForm.aseguradora} onChange={handleS} required className="h-12" />
                                         </div>
                                         <div className="space-y-2">
-                                            <Label>Fin vigencia *</Label>
-                                            <Input name="vigencia_fin" type="date" value={sForm.vigencia_fin} onChange={handleS} required className="h-12" />
+                                            <Label>Número de póliza *</Label>
+                                            <Input name="num_poliza" placeholder="POL-123456" value={sForm.num_poliza} onChange={handleS} required className="h-12" />
+                                        </div>
+                                        <div className="grid grid-cols-2 gap-3">
+                                            <div className="space-y-2">
+                                                <Label>Inicio vigencia *</Label>
+                                                <Input name="vigencia_inicio" type="date" value={sForm.vigencia_inicio} onChange={handleS} required className="h-12" />
+                                            </div>
+                                            <div className="space-y-2">
+                                                <Label>Fin vigencia *</Label>
+                                                <Input name="vigencia_fin" type="date" value={sForm.vigencia_fin} onChange={handleS} required className="h-12" />
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
-                            </div>
+                            )}
 
-                            {error && (
+                            {formError && (
                                 <div className="p-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700">
-                                    {error}
+                                    {formError}
                                 </div>
                             )}
                         </form>
-                        <DrawerFooter>
-                            <Button type="submit" form="vehiculoForm" className="h-12 text-base font-semibold" disabled={saving}>
-                                {saving ? 'Guardando...' : 'Guardar Vehículo'}
+
+                        <DrawerFooter className="pt-2">
+                            <Button
+                                type="submit"
+                                form="vehiculoForm"
+                                className="h-12 text-lg"
+                                disabled={saving}
+                            >
+                                {saving
+                                    ? 'Guardando…'
+                                    : editingVehiculo
+                                        ? 'Guardar Cambios'
+                                        : 'Guardar Vehículo'}
                             </Button>
                             <DrawerClose asChild>
                                 <Button variant="outline" className="h-12">Cancelar</Button>

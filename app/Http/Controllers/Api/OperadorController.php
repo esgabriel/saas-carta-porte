@@ -61,9 +61,23 @@ class OperadorController extends Controller
 
     /**
      * Remove the specified resource from storage.
+     *
+     * Si el operador tiene viajes asociados se devuelve 409 con el conteo
+     * para que el frontend ofrezca la opción de desactivarlo en su lugar.
      */
     public function destroy(Operador $operadore): \Illuminate\Http\JsonResponse
     {
+        $viajesCount = $operadore->viajes()->count();
+
+        if ($viajesCount > 0) {
+            return response()->json([
+                'message'      => "Este operador tiene {$viajesCount} " .
+                                  ($viajesCount === 1 ? 'viaje asociado' : 'viajes asociados') .
+                                  '. Puedes desactivarlo para que no aparezca en nuevos viajes.',
+                'viajes_count' => $viajesCount,
+            ], 409);
+        }
+
         $operadore->delete();
 
         return response()->json(null, 204);
