@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import api from '@/lib/api';
 import {
-    Plus, Shield, Trash2, Pencil, RotateCcw, AlertTriangle,
+    Plus, Trash2, Pencil, RotateCcw, AlertTriangle, ShieldAlert,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -16,9 +16,6 @@ const EMPTY_V = {
     placa: '', anio_modelo: '', config_vehicular: '', peso_bruto_vehicular: '',
     tipo_permiso_sct: '', num_permiso_sct: '', num_serie: '',
 };
-const EMPTY_S = {
-    aseguradora: '', num_poliza: '', vigencia_inicio: '', vigencia_fin: '',
-};
 
 const IDLE = null;
 
@@ -28,7 +25,6 @@ export default function Vehiculos() {
     const [isDrawerOpen, setIsDrawerOpen] = useState(false);
     const [editingVehiculo, setEditingVehiculo] = useState(null); // null = crear
     const [vForm, setVForm] = useState(EMPTY_V);
-    const [sForm, setSForm] = useState(EMPTY_S);
     const [saving, setSaving] = useState(false);
     const [formError, setFormError] = useState('');
 
@@ -56,7 +52,6 @@ export default function Vehiculos() {
     const openCreate = () => {
         setEditingVehiculo(null);
         setVForm(EMPTY_V);
-        setSForm(EMPTY_S);
         setFormError('');
         setIsDrawerOpen(true);
     };
@@ -77,36 +72,21 @@ export default function Vehiculos() {
     };
 
     const handleV = (e) => setVForm((p) => ({ ...p, [e.target.name]: e.target.value }));
-    const handleS = (e) => setSForm((p) => ({ ...p, [e.target.name]: e.target.value }));
 
     const handleSubmit = async (e) => {
         e.preventDefault();
         setSaving(true);
         setFormError('');
         try {
+            const payload = {
+                ...vForm,
+                anio_modelo: parseInt(vForm.anio_modelo),
+                peso_bruto_vehicular: parseFloat(vForm.peso_bruto_vehicular),
+            };
             if (editingVehiculo) {
-                // Editar: solo datos del vehículo (seguros en pantalla separada)
-                await api.patch(`/vehiculos/${editingVehiculo.id}`, {
-                    ...vForm,
-                    anio_modelo: parseInt(vForm.anio_modelo),
-                    peso_bruto_vehicular: parseFloat(vForm.peso_bruto_vehicular),
-                });
+                await api.patch(`/vehiculos/${editingVehiculo.id}`, payload);
             } else {
-                // Crear: vehículo + seguro RC
-                const vRes = await api.post('/vehiculos', {
-                    ...vForm,
-                    anio_modelo: parseInt(vForm.anio_modelo),
-                    peso_bruto_vehicular: parseFloat(vForm.peso_bruto_vehicular),
-                });
-                const vehiculoId = vRes.data.data.id;
-                await api.post('/seguros', {
-                    vehiculo_id: vehiculoId,
-                    tipo: 'responsabilidad_civil',
-                    aseguradora: sForm.aseguradora,
-                    num_poliza: sForm.num_poliza,
-                    vigencia_inicio: sForm.vigencia_inicio,
-                    vigencia_fin: sForm.vigencia_fin,
-                });
+                await api.post('/vehiculos', payload);
             }
             setIsDrawerOpen(false);
             fetchAll();
@@ -274,6 +254,8 @@ export default function Vehiculos() {
                         const ds = deleteState[v.id];
                         const isInactive = v.activo === false;
                         const isConflict = ds?.step === 'conflict';
+                        const hasRC = Array.isArray(v.seguros) &&
+                            v.seguros.some((s) => s.tipo === 'responsabilidad_civil');
 
                         return (
                             <Card
@@ -291,6 +273,12 @@ export default function Vehiculos() {
                                                 <span className="inline-block px-2 py-0.5 bg-muted text-muted-foreground text-xs rounded">
                                                     {v.anio_modelo} · {v.config_vehicular}
                                                 </span>
+                                                {!hasRC && (
+                                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-amber-100 text-amber-700 text-xs font-semibold rounded">
+                                                        <ShieldAlert className="h-3 w-3" />
+                                                        Sin póliza RC
+                                                    </span>
+                                                )}
                                                 {isInactive && (
                                                     <span className="inline-block px-2 py-0.5 bg-yellow-100 text-yellow-700 text-xs font-semibold rounded">
                                                         Inactivo
@@ -363,7 +351,7 @@ export default function Vehiculos() {
                             <DrawerDescription>
                                 {editingVehiculo
                                     ? 'Modifica los datos de la unidad y guarda los cambios.'
-                                    : 'Datos de la unidad y su póliza de seguro RC (requerida por el SAT).'}
+                                    : 'Datos de la unidad. Registra el seguro RC desde la pantalla de Seguros.'}
                             </DrawerDescription>
                         </DrawerHeader>
 
@@ -399,37 +387,6 @@ export default function Vehiculos() {
                                 <Label>Número de serie (opcional)</Label>
                                 <Input name="num_serie" placeholder="1HGBH41JXMN109186" value={vForm.num_serie} onChange={handleV} className="h-12 font-mono" />
                             </div>
-
-                            {/* Seguro RC — solo al crear (al editar se gestiona en pantalla separada) */}
-                            {!editingVehiculo && (
-                                <div className="border-t pt-4 mt-2">
-                                    <div className="flex items-center gap-2 mb-4">
-                                        <Shield className="h-4 w-4 text-primary" />
-                                        <p className="font-semibold text-sm">Seguro de Responsabilidad Civil</p>
-                                        <span className="text-xs bg-red-100 text-red-600 px-2 py-0.5 rounded-full">Requerido SAT</span>
-                                    </div>
-                                    <div className="flex flex-col gap-4">
-                                        <div className="space-y-2">
-                                            <Label>Aseguradora *</Label>
-                                            <Input name="aseguradora" placeholder="Ej. GNP Seguros" value={sForm.aseguradora} onChange={handleS} required className="h-12" />
-                                        </div>
-                                        <div className="space-y-2">
-                                            <Label>Número de póliza *</Label>
-                                            <Input name="num_poliza" placeholder="POL-123456" value={sForm.num_poliza} onChange={handleS} required className="h-12" />
-                                        </div>
-                                        <div className="grid grid-cols-2 gap-3">
-                                            <div className="space-y-2">
-                                                <Label>Inicio vigencia *</Label>
-                                                <Input name="vigencia_inicio" type="date" value={sForm.vigencia_inicio} onChange={handleS} required className="h-12" />
-                                            </div>
-                                            <div className="space-y-2">
-                                                <Label>Fin vigencia *</Label>
-                                                <Input name="vigencia_fin" type="date" value={sForm.vigencia_fin} onChange={handleS} required className="h-12" />
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            )}
 
                             {formError && (
                                 <div className="p-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700">

@@ -41,30 +41,45 @@ class UbicacionController extends Controller
     /**
      * Display the specified resource.
      */
-    public function show(Ubicacion $ubicasione): \Illuminate\Http\JsonResponse
+    public function show(Ubicacion $ubicacion): \Illuminate\Http\JsonResponse
     {
-        return response()->json(['data' => $ubicasione]);
+        return response()->json(['data' => $ubicacion]);
     }
 
     /**
      * Update the specified resource in storage.
      */
-    public function update(UpdateUbicacionRequest $request, Ubicacion $ubicasione): \Illuminate\Http\JsonResponse
+    public function update(UpdateUbicacionRequest $request, Ubicacion $ubicacion): \Illuminate\Http\JsonResponse
     {
-        $ubicasione->update($request->validated());
+        $ubicacion->update($request->validated());
 
         return response()->json([
             'message' => 'Ubicación actualizada correctamente.',
-            'data' => $ubicasione
+            'data' => $ubicacion
         ]);
     }
 
     /**
      * Remove the specified resource from storage.
+     *
+     * Una ubicación puede ser referenciada como origen o como destino en un
+     * viaje. Sumamos ambos conteos para detectar cualquier dependencia.
      */
-    public function destroy(Ubicacion $ubicasione): \Illuminate\Http\JsonResponse
+    public function destroy(Ubicacion $ubicacion): \Illuminate\Http\JsonResponse
     {
-        $ubicasione->delete();
+        $count = $ubicacion->viajesComoOrigen()->count()
+               + $ubicacion->viajesComoDestino()->count();
+
+        if ($count > 0) {
+            return response()->json([
+                'message'      => "Esta ubicación está referenciada en {$count} " .
+                                  ($count === 1 ? 'viaje' : 'viajes') .
+                                  '. Puedes desactivarla para que no aparezca en nuevos viajes.',
+                'viajes_count' => $count,
+            ], 409);
+        }
+
+        $ubicacion->delete();
 
         return response()->json(null, 204);
     }

@@ -19,7 +19,7 @@ class VehiculoController extends Controller
      */
     public function index(): \Illuminate\Http\JsonResponse
     {
-        return response()->json(['data' => Vehiculo::all()]);
+        return response()->json(['data' => Vehiculo::with('seguros')->get()]);
     }
 
     /**
