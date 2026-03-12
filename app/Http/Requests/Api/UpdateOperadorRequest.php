@@ -27,7 +27,11 @@ class UpdateOperadorRequest extends FormRequest
             'curp' => ['sometimes', 'required', 'string', 'max:18'],
             'num_licencia' => ['sometimes', 'required', 'string', 'max:50'],
             'tipo_licencia' => ['sometimes', 'required', 'string', 'max:10'],
-            'vigencia_licencia' => ['sometimes', 'required', 'date'],
+            'vigencia_licencia' => ['sometimes', 'nullable', 'date'],
+            'calle'         => ['sometimes', 'nullable', 'string', 'max:255'],
+            'municipio'     => ['sometimes', 'nullable', 'string', 'max:255'],
+            'estado'        => ['sometimes', 'nullable', 'string', 'max:255'],
+            'codigo_postal' => ['sometimes', 'nullable', 'string', 'max:10'],
             'activo' => ['sometimes', 'boolean'],
         ];
     }

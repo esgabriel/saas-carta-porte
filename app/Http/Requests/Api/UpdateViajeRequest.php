@@ -44,6 +44,7 @@ class UpdateViajeRequest extends FormRequest
             'fecha_hora_salida' => ['sometimes', 'required', 'date'],
             'fecha_hora_llegada_est' => ['nullable', 'date', 'after_or_equal:fecha_hora_salida'],
             'distancia_recorrida' => ['nullable', 'numeric', 'min:0'],
+            'precio_servicio'     => ['sometimes', 'required', 'numeric', 'min:0'],
             'estatus' => [
                 'sometimes', 'required', 'string',
                 Rule::in(['borrador', 'en_proceso', 'timbrado', 'cancelado']),

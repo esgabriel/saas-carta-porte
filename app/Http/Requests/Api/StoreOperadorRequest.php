@@ -22,13 +22,17 @@ class StoreOperadorRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'nombre' => ['required', 'string', 'max:255'],
-            'rfc' => ['required', 'string', 'regex:/^[A-Z&Ñ]{3,4}[0-9]{2}(0[1-9]|1[012])(0[1-9]|[12][0-9]|3[01])[A-Z0-9]{2}[A-Z0-9A]$/i'],
-            'curp' => ['required', 'string', 'max:18'],
-            'num_licencia' => ['required', 'string', 'max:50'],
-            'tipo_licencia' => ['required', 'string', 'max:10'],
-            'vigencia_licencia' => ['required', 'date'],
-            'activo' => ['boolean'],
+            'nombre'            => ['required', 'string', 'max:255'],
+            'rfc'               => ['required', 'string', 'regex:/^[A-Z&Ñ]{3,4}[0-9]{2}(0[1-9]|1[012])(0[1-9]|[12][0-9]|3[01])[A-Z0-9]{2}[A-Z0-9A]$/i'],
+            'curp'              => ['required', 'string', 'max:18'],
+            'num_licencia'      => ['required', 'string', 'max:50'],
+            'tipo_licencia'     => ['required', 'string', 'max:10'],
+            'vigencia_licencia' => ['nullable', 'date'],
+            'calle'             => ['nullable', 'string', 'max:255'],
+            'municipio'         => ['nullable', 'string', 'max:255'],
+            'estado'            => ['nullable', 'string', 'max:255'],
+            'codigo_postal'     => ['nullable', 'string', 'max:10'],
+            'activo'            => ['boolean'],
         ];
     }
 }

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import api from '@/lib/api';
 import { Plus, Truck, ChevronRight, ChevronLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -22,6 +22,7 @@ const STATUS = {
 const INITIAL_FORM = {
     cliente_id: '', ubicacion_origen_id: '', ubicacion_destino_id: '',
     fecha_hora_salida: '', fecha_hora_llegada_est: '', distancia_recorrida: '',
+    precio_servicio: '',
     vehiculo_id: '', operador_id: '', remolque_id: '',
 };
 
@@ -31,17 +32,37 @@ const INITIAL_MERC = {
     valor_mercancia: '', moneda: 'MXN', material_peligroso: false, cve_material_peligroso: '',
 };
 
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from '@/components/ui/select';
+
 // ─── Helper: select nativo con estilo consistente ─────────────────────────────
 
 function Sel({ label, name, value, onChange, options, placeholder, required }) {
     return (
         <div className="space-y-2">
             <Label>{label}{required && ' *'}</Label>
-            <select name={name} value={value} onChange={onChange} required={required}
-                className="flex h-12 w-full rounded-md border border-input bg-transparent px-3 py-2 text-base shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring">
-                <option value="">{placeholder ?? 'Selecciona...'}</option>
-                {options.map(o => <option key={o.v} value={o.v}>{o.l}</option>)}
-            </select>
+            <Select
+                value={value || undefined}
+                onValueChange={(val) => {
+                    onChange({ target: { name, value: val }});
+                }}
+            >
+                <SelectTrigger className="h-12 w-full bg-background">
+                    <SelectValue placeholder={placeholder ?? 'Selecciona...'} />
+                </SelectTrigger>
+                <SelectContent>
+                    {options.map(o => (
+                        <SelectItem key={o.v} value={o.v}>
+                            {o.l}
+                        </SelectItem>
+                    ))}
+                </SelectContent>
+            </Select>
         </div>
     );
 }
@@ -71,6 +92,11 @@ function Paso1({ form, onChange, cats }) {
                 <Label>Distancia recorrida (km)</Label>
                 <Input name="distancia_recorrida" type="number" min="0" placeholder="350"
                     value={form.distancia_recorrida} onChange={onChange} className="h-12" />
+            </div>
+            <div className="space-y-2">
+                <Label>Precio del Servicio (MXN) *</Label>
+                <Input name="precio_servicio" type="number" min="0" step="0.01" placeholder="Ej. 15000"
+                    value={form.precio_servicio} onChange={onChange} required className="h-12" />
             </div>
         </div>
     );
@@ -172,8 +198,17 @@ export default function Viajes() {
     const [saving, setSaving] = useState(false);
     const [saveError, setSaveError] = useState('');
     const [detalle, setDetalle] = useState(null);
-    const [timbrando, setTimbrando] = useState(false);
-    const [tResult, setTResult] = useState(null);
+    const [timbrando, setTimbrando] = useState(false); // true mientras polling activo
+    const [tResult, setTResult] = useState(null);       // { ok, msg, uuid } | null
+    const pollingRef = useRef(null);  // intervalId activo
+    const pollingDoneRef = useRef(false); // bandera: ya se procesó un resultado definitivo
+
+    // Limpia el intervalo al desmontar el componente
+    useEffect(() => {
+        return () => {
+            if (pollingRef.current) clearInterval(pollingRef.current);
+        };
+    }, []);
 
     const fetchViajes = async () => {
         try {
@@ -230,23 +265,83 @@ export default function Viajes() {
         }
     };
 
+    // ── Polling post-timbrado ─────────────────────────────────────────────────
+
+    const stopPolling = () => {
+        if (pollingRef.current) {
+            clearInterval(pollingRef.current);
+            pollingRef.current = null;
+        }
+    };
+
+    const startPolling = (viajeId) => {
+        const MAX_POLLS = 15;   // 15 × 2s = 30 s máximo
+        let count = 0;
+        pollingDoneRef.current = false; // reset para cada nuevo intento
+
+        pollingRef.current = setInterval(async () => {
+            // Guardia principal: si ya se procesó un resultado definitivo, ignorar
+            if (pollingDoneRef.current) return;
+
+            count += 1;
+
+            if (count > MAX_POLLS) {
+                pollingDoneRef.current = true;
+                clearInterval(pollingRef.current);
+                pollingRef.current = null;
+                setTimbrando(false);
+                setTResult({
+                    ok: false,
+                    timeout: true,
+                    msg: 'El proceso está tardando más de lo esperado. Recarga la página para ver el estado.',
+                });
+                return;
+            }
+
+            try {
+                const res = await api.get(`/cartas-porte?viaje_id=${viajeId}`);
+                const carta = res.data.data?.[0];
+                if (!carta) return; // aún no existe, seguir esperando
+
+                if (carta.estatus === 'timbrado') {
+                    pollingDoneRef.current = true;
+                    clearInterval(pollingRef.current);
+                    pollingRef.current = null;
+                    setTimbrando(false);
+                    setTResult({ ok: true, msg: 'Carta Porte timbrada exitosamente.', uuid: carta.uuid_timbrado });
+                    fetchViajes();
+                    setDetalle((prev) => prev ? { ...prev, estatus: 'timbrado' } : prev);
+                } else if (carta.estatus === 'error') {
+                    pollingDoneRef.current = true;
+                    clearInterval(pollingRef.current);
+                    pollingRef.current = null;
+                    setTimbrando(false);
+                    setTResult({ ok: false, msg: carta.error_detalle || 'Error desconocido al timbrar.' });
+                }
+                // si es 'procesando', simplemente esperar
+            } catch (e) {
+                console.error('Error en polling carta porte:', e);
+            }
+        }, 2000);
+    };
+
     const handleTimbrar = async () => {
+        stopPolling();
         setTimbrando(true);
         setTResult(null);
         try {
-            const res = await api.post('/cartas-porte', { viaje_id: detalle.id });
-            setTResult({ ok: true, msg: res.data.message, uuid: res.data.data?.uuid_timbrado });
-            fetchViajes();
+            await api.post('/cartas-porte', { viaje_id: detalle.id });
+            // 202 recibido — arrancar polling
+            startPolling(detalle.id);
         } catch (e) {
+            setTimbrando(false);
             const msg = e.response?.data?.error_detalle || e.response?.data?.message || 'Error desconocido';
             setTResult({ ok: false, msg });
-        } finally {
-            setTimbrando(false);
         }
     };
 
     // Validaciones por paso
-    const ok1 = form.cliente_id && form.ubicacion_origen_id && form.ubicacion_destino_id && form.fecha_hora_salida;
+    const ok1 = form.cliente_id && form.ubicacion_origen_id && form.ubicacion_destino_id && form.fecha_hora_salida && form.precio_servicio;
     const ok2 = form.vehiculo_id && form.operador_id;
     const ok3 = mercs.every(m => m.clave_prod_stcc && m.descripcion && m.cantidad && m.clave_unidad && m.peso_en_kg);
 
@@ -302,7 +397,9 @@ export default function Viajes() {
                 <DrawerContent className="max-h-[90vh]">
                     {detalle && (() => {
                         const st = STATUS[detalle.estatus] ?? STATUS.borrador;
-                        const puedeTimbrar = !['timbrado', 'cancelado'].includes(detalle.estatus);
+                        // ocultar botón si ya está timbrado/cancelado O si el polling lo confirmó
+                        const puedeTimbrar = !['timbrado', 'cancelado'].includes(detalle.estatus)
+                            && !(tResult?.ok);
                         return (
                             <>
                                 <DrawerHeader className="text-left">
@@ -320,6 +417,7 @@ export default function Viajes() {
                                             ['Destino', detalle.ubicacion_destino?.alias || detalle.ubicacion_destino?.municipio],
                                             ['Vehículo', detalle.vehiculo?.placa],
                                             ['Mercancías', `${detalle.mercancias?.length ?? 0} ítem(s)`],
+                                            ['Precio', detalle.precio_servicio != null ? `$${Number(detalle.precio_servicio).toLocaleString('es-MX', { minimumFractionDigits: 2 })} MXN` : '—'],
                                         ].map(([k, val]) => (
                                             <div key={k}>
                                                 <p className="text-muted-foreground text-xs">{k}</p>
@@ -327,30 +425,56 @@ export default function Viajes() {
                                             </div>
                                         ))}
                                     </div>
-
-                                    {tResult && (
-                                        <div className={`p-3 rounded-lg text-sm border ${tResult.ok ? 'bg-green-50 border-green-200 text-green-800' : 'bg-red-50 border-red-200 text-red-700'}`}>
-                                            <p className="font-semibold">{tResult.ok ? '✓ Timbrado exitosamente' : '✗ Error al timbrar'}</p>
-                                            <p className="mt-0.5">{tResult.msg}</p>
-                                            {tResult.uuid && <p className="font-mono text-xs mt-1 break-all">UUID: {tResult.uuid}</p>}
-                                        </div>
-                                    )}
                                 </div>
                                 <DrawerFooter>
-                                    {puedeTimbrar && (
-                                        <Button onClick={handleTimbrar} disabled={timbrando}
-                                            className="h-14 text-base font-semibold bg-green-600 hover:bg-green-700">
-                                            {timbrando ? 'Timbrando con el SAT...' : '🖨  Timbrar Carta Porte'}
-                                        </Button>
-                                    )}
-                                    <DrawerClose asChild>
-                                        <Button variant="outline" className="h-12">Cerrar</Button>
-                                    </DrawerClose>
-                                </DrawerFooter>
-                            </>
-                        );
+                                        {/* Spinner de procesamiento */}
+                                        {timbrando && (
+                                            <div className="flex items-center justify-center gap-3 h-14 text-muted-foreground">
+                                                <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-primary" />
+                                                <span className="text-sm font-medium">Procesando timbrado…</span>
+                                            </div>
+                                        )}
+
+                                        {/* Resultado del timbrado */}
+                                        {!timbrando && tResult && (
+                                            <div className={`p-3 rounded-lg text-sm border ${tResult.ok
+                                                ? 'bg-green-50 border-green-200 text-green-800'
+                                                : 'bg-red-50 border-red-200 text-red-700'
+                                                }`}>
+                                                <p className="font-semibold">
+                                                    {tResult.ok ? '✓ Timbrado exitosamente' : '✗ Error al timbrar'}
+                                                </p>
+                                                <p className="mt-0.5">{tResult.msg}</p>
+                                                {tResult.uuid && (
+                                                    <p className="font-mono text-xs mt-1 break-all">UUID: {tResult.uuid}</p>
+                                                )}
+                                            </div>
+                                        )}
+
+                                        {/* Botón reintentar si hubo error */}
+                                        {!timbrando && tResult && !tResult.ok && !tResult.timeout && (
+                                            <Button onClick={handleTimbrar}
+                                                className="h-12 text-base font-semibold bg-amber-600 hover:bg-amber-700">
+                                                🔄 Reintentar
+                                            </Button>
+                                        )}
+
+                                        {/* Botón timbrar — oculto (no solo disabled) cuando ya timbrado/cancelado/polling */}
+                                        {!timbrando && puedeTimbrar && !tResult && (
+                                            <Button onClick={handleTimbrar}
+                                                className="h-14 text-base font-semibold bg-green-600 hover:bg-green-700">
+                                                🖨  Timbrar Carta Porte
+                                            </Button>
+                                        )}
+
+                                        <DrawerClose asChild>
+                                            <Button variant="outline" className="h-12">Cerrar</Button>
+                                        </DrawerClose>
+                                    </DrawerFooter>
+                                </>
+                                );
                     })()}
-                </DrawerContent>
+                            </DrawerContent >
             </Drawer>
 
             {/* ── FAB + Wizard de creación ── */}

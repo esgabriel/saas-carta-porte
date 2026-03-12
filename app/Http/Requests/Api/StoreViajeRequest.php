@@ -46,6 +46,7 @@ class StoreViajeRequest extends FormRequest
             'fecha_hora_salida' => ['required', 'date'],
             'fecha_hora_llegada_est' => ['nullable', 'date', 'after_or_equal:fecha_hora_salida'],
             'distancia_recorrida' => ['nullable', 'numeric', 'min:0'],
+            'precio_servicio'     => ['required', 'numeric', 'min:0'],
             'estatus' => [
                 'nullable',
                 'string',

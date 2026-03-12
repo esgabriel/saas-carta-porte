@@ -17,10 +17,15 @@ class CartaPorteController extends Controller
     /**
      * Display a listing of the resource.
      */
-    public function index()
+    public function index(Request $request)
     {
-        $cartasPorte = CartaPorte::with('viaje')->get();
-        return response()->json(['data' => $cartasPorte]);
+        $query = CartaPorte::with('viaje');
+
+        if ($request->has('viaje_id')) {
+            $query->where('viaje_id', $request->viaje_id);
+        }
+
+        return response()->json(['data' => $query->get()]);
     }
 
     /**

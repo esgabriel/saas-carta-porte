@@ -35,6 +35,7 @@ class Viaje extends Model
         'fecha_hora_salida',
         'fecha_hora_llegada_est',
         'distancia_recorrida',
+        'precio_servicio',
         'estatus',
     ];
 
@@ -42,6 +43,7 @@ class Viaje extends Model
         'fecha_hora_salida' => 'datetime',
         'fecha_hora_llegada_est' => 'datetime',
         'distancia_recorrida' => 'decimal:2',
+        'precio_servicio'     => 'decimal:2',
         'created_at' => 'datetime',
         'updated_at' => 'datetime',
     ];

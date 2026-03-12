@@ -27,6 +27,7 @@ const EMPTY_FORM = {
     uso_cfdi: "",
     correo: "",
     telefono: "",
+    codigo_postal: "",
 };
 
 // Estado de confirmación por card:
@@ -84,6 +85,7 @@ export default function Clientes() {
             uso_cfdi: cliente.uso_cfdi ?? "",
             correo: cliente.correo ?? "",
             telefono: cliente.telefono ?? "",
+            codigo_postal: cliente.codigo_postal ?? "",
         });
         setIsDrawerOpen(true);
     };
@@ -105,7 +107,11 @@ export default function Clientes() {
             setIsDrawerOpen(false);
             fetchClientes();
         } catch (error) {
+            const msg = error.response?.data?.message
+                || JSON.stringify(error.response?.data?.errors)
+                || error.message;
             console.error("Error al guardar cliente:", error.response?.data || error.message);
+            alert('Error al guardar: ' + msg);
         } finally {
             setSaving(false);
         }
@@ -461,6 +467,20 @@ export default function Clientes() {
                                     placeholder="5551234567"
                                     value={formData.telefono}
                                     onChange={handleChange}
+                                    className="h-12"
+                                />
+                            </div>
+                            <div className="space-y-2">
+                                <Label htmlFor="codigo_postal">Código Postal</Label>
+                                <Input
+                                    id="codigo_postal"
+                                    name="codigo_postal"
+                                    type="text"
+                                    placeholder="06600"
+                                    maxLength={5}
+                                    value={formData.codigo_postal}
+                                    onChange={handleChange}
+                                    required
                                     className="h-12"
                                 />
                             </div>

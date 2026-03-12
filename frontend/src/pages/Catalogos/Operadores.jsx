@@ -63,7 +63,9 @@ export default function Operadores() {
             curp: op.curp ?? '',
             num_licencia: op.num_licencia ?? '',
             tipo_licencia: op.tipo_licencia ?? 'E',
-            vigencia_licencia: op.vigencia_licencia ?? '',
+            vigencia_licencia: op.vigencia_licencia
+                ? op.vigencia_licencia.split('T')[0]
+                : '',
             calle: op.calle ?? '',
             municipio: op.municipio ?? '',
             estado: op.estado ?? '',
@@ -92,7 +94,11 @@ export default function Operadores() {
             setIsDrawerOpen(false);
             fetchAll();
         } catch (e) {
+            const msg = e.response?.data?.message
+                || JSON.stringify(e.response?.data?.errors)
+                || e.message;
             console.error('Error al guardar operador:', e.response?.data || e.message);
+            alert('Error al guardar: ' + msg);
         } finally {
             setSaving(false);
         }

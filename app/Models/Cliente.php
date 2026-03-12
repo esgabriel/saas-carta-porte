@@ -27,6 +27,7 @@ class Cliente extends Model
         'uso_cfdi',
         'correo',
         'telefono',
+        'codigo_postal',
         'activo',
     ];
 

@@ -29,7 +29,7 @@ class FacturapiService implements FacturacionGatewayInterface
                 'tax_system' => $viaje->cliente->regimen_fiscal,
                 'email'      => $viaje->cliente->correo ?? 'sin@correo.com',
                 'address'    => [
-                    'zip' => '06600',
+                    'zip' => $viaje->cliente->codigo_postal,
                 ],
             ],
             'use'   => $viaje->cliente->uso_cfdi ?? 'S01',
@@ -39,7 +39,7 @@ class FacturapiService implements FacturacionGatewayInterface
                     'product'  => [
                         'description' => 'Servicios de transporte de carga',
                         'product_key' => '78101802',
-                        'price'       => 10000,
+                        'price'       => (float) $viaje->precio_servicio,
                         'unit_key'    => 'E48',
                     ],
                 ],
